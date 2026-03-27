@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Java 编程语言题库 - 在线刷题</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="app-header">
+        <div class="header-left">
+            <h1>Java 编程语言题库</h1>
+            <span class="header-subtitle">共 194 题 · 在线刷题</span>
+        </div>
+        <div class="header-stats" id="header-stats">
+            <span class="stat-item">已答 <strong id="stat-answered">0</strong> / <strong id="stat-total">194</strong></span>
+            <span class="stat-item stat-correct">正确 <strong id="stat-correct">0</strong></span>
+            <span class="stat-item stat-incorrect">错误 <strong id="stat-incorrect">0</strong></span>
+        </div>
+        <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板">
+            <span class="hamburger-icon"></span>
+        </button>
+    </header>
+
+    <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden></div>
+    <div id="app-container">        <aside id="sidebar">
+            <div class="sidebar-stats" id="sidebar-stats">
+                <div class="sidebar-stat-card stat-answered-card">
+                    <div class="stat-num" id="sidebar-answered">0</div>
+                    <div class="stat-label">已答</div>
+                </div>
+                <div class="sidebar-stat-card stat-correct-card">
+                    <div class="stat-num" id="sidebar-correct">0</div>
+                    <div class="stat-label">正确</div>
+                </div>
+                <div class="sidebar-stat-card stat-incorrect-card">
+                    <div class="stat-num" id="sidebar-incorrect">0</div>
+                    <div class="stat-label">错误</div>
+                </div>
+            </div>
+            <div class="filter-tabs" id="filter-tabs">
+                <button data-filter="all" class="active">全部</button>
+                <button data-filter="single">单选</button>
+                <button data-filter="multiple">多选</button>
+                <button data-filter="tf">判断</button>
+                <button data-filter="fill">填空</button>
+                <button data-filter="short">简答</button>
+                <button data-filter="analysis">分析</button>
+            </div>
+            <div id="question-grid"></div>
+            <div class="sidebar-legend">
+                <span class="legend-item"><span class="dot dot-unanswered"></span>未答</span>
+                <span class="legend-item"><span class="dot dot-correct"></span>正确</span>
+                <span class="legend-item"><span class="dot dot-incorrect"></span>错误</span>
+                <span class="legend-item"><span class="dot dot-revealed"></span>已看</span>
+            </div>
+        </aside>
+
+        <main id="main-content">
+            <div id="question-card">
+                <div class="question-header">
+                    <span class="question-badge" id="question-badge">加载中...</span>
+                    <span class="question-number" id="question-number"></span>
+                </div>
+                <div class="question-text" id="question-text"></div>
+                <div class="question-options" id="question-options"></div>
+                <div class="answer-section" id="answer-section">
+                    <button id="show-answer-btn" class="btn-show-answer">显示答案与解析</button>
+                    <div id="answer-content" class="answer-content hidden">
+                        <div class="correct-answer">
+                            <span class="answer-label">正确答案</span>
+                            <div class="answer-value" id="correct-answer-text"></div>
+                        </div>
+                        <div class="explanation" id="explanation-area">
+                            <span class="answer-label">解析</span>
+                            <div class="explanation-value" id="explanation-text"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navigation-bar">
+                <button id="prev-btn" class="btn-nav">上一题</button>
+                <span class="nav-progress" id="nav-progress">1 / 194</span>
+                <button id="next-btn" class="btn-nav">下一题</button>
+                <button id="submit-btn" class="btn-submit">查看统计</button>
+            </div>
+        </main>
+    </div>
+
+    <div id="result-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <h2>测验结果</h2>
+            <div id="result-summary"></div>
+            <div class="modal-actions">
+                <button id="review-btn" class="btn-nav">查看答题情况</button>
+                <button id="restart-btn" class="btn-submit">重新开始</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="quiz.js"></script>
+</body>
+</html>
