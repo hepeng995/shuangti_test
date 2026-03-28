@@ -346,15 +346,6 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .fill-label { font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
 .fill-value { font-weight: 600; }
 
-/* Shuffle toggle */
-.shuffle-toggle {
-    display: flex; align-items: center; gap: 6px;
-    padding: 4px 12px; font-size: 0.8rem;
-    color: var(--text-muted); cursor: pointer;
-    user-select: none;
-}
-.shuffle-toggle input { accent-color: var(--primary); }
-
 /* Multi-select hint */
 .multi-hint {
     font-size: 0.82rem;

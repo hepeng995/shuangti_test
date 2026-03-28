@@ -1701,7 +1701,6 @@ var state = {
     redoQuestionIds: [],
     savedSnapshot: null,
     bookmarked: [],
-    shuffleOrder: null
 };
 
 // ===== DOM Cache =====
@@ -1746,7 +1745,6 @@ function initDom() {
     dom.exportBtn = document.getElementById('export-btn');
     dom.importBtn = document.getElementById('import-btn');
     dom.importFile = document.getElementById('import-file');
-    dom.shuffleToggle = document.getElementById('shuffle-toggle');
     dom.searchClear = document.getElementById('search-clear');
     dom.confirmModal = document.getElementById('confirm-modal');
     dom.confirmMsg = document.getElementById('confirm-message');
@@ -1856,15 +1854,6 @@ function getFiltered() {
         list = list.filter(function(q) {
             return q.text.toLowerCase().indexOf(kw) !== -1 ||
                    (q.options && q.options.some(function(o) { return o.text.toLowerCase().indexOf(kw) !== -1; }));
-        });
-    }
-    // Apply shuffle order if enabled
-    if (state.shuffleOrder && list.length > 0) {
-        var orderMap = {};
-        state.shuffleOrder.forEach(function(id, i) { orderMap[id] = i; });
-        list = list.slice().sort(function(a, b) {
-            return (orderMap[a.id] !== undefined ? orderMap[a.id] : a.id) -
-                   (orderMap[b.id] !== undefined ? orderMap[b.id] : b.id);
         });
     }
     return list;
@@ -1996,14 +1985,15 @@ function updateGridButton(q) {
 
 // ===== Render Question =====
 function renderQuestion() {
-    // Direction-aware fade-in animation
+    // Direction-aware fade-in animation (only on navigation, not option selection)
     var card = document.getElementById('question-card');
-    if (card) {
+    if (card && state.navDirection) {
         card.classList.remove('fade-in');
         card.classList.remove('fade-in-forward');
         card.classList.remove('fade-in-backward');
         void card.offsetWidth; // force reflow
         card.classList.add(state.navDirection === 'forward' ? 'fade-in-forward' : 'fade-in-backward');
+        state.navDirection = null; // reset so option clicks don't replay animation
     }
 
     var filtered = getFiltered();
@@ -2313,7 +2303,7 @@ function revealAnswer() {
             autoJumpTimer = null;
             var cur = getFiltered()[state.currentIndex];
             if (cur && cur.id === q.id) goNext();
-        }, 1200);
+        }, 600);
     }
 
     // Redo mode: update banner and check completion
@@ -2740,7 +2730,6 @@ function saveState() {
             redoQuestionIds: state.redoQuestionIds,
             savedSnapshot: state.savedSnapshot,
             bookmarked: state.bookmarked,
-            shuffleOrder: state.shuffleOrder
         }));
         _storageWarned = false;
     } catch (e) {
@@ -2769,7 +2758,6 @@ function loadState() {
         state.redoQuestionIds = d.redoQuestionIds || [];
         state.savedSnapshot = d.savedSnapshot || null;
         state.bookmarked = d.bookmarked || [];
-        state.shuffleOrder = d.shuffleOrder || null;
     } catch (e) { console.warn('loadState:', e.message); }
 }
 
@@ -2998,28 +2986,6 @@ function bindEvents() {
                 importProgress(this.files[0]);
                 this.value = '';
             }
-        });
-    }
-
-    // Shuffle toggle
-    if (dom.shuffleToggle) {
-        dom.shuffleToggle.addEventListener('change', function() {
-            if (this.checked) {
-                // Generate shuffled order
-                var indices = [];
-                for (var i = 0; i < quizData.length; i++) indices.push(i);
-                for (var i = indices.length - 1; i > 0; i--) {
-                    var j = Math.floor(Math.random() * (i + 1));
-                    var tmp = indices[i]; indices[i] = indices[j]; indices[j] = tmp;
-                }
-                state.shuffleOrder = indices.map(function(i) { return quizData[i].id; });
-            } else {
-                state.shuffleOrder = null;
-            }
-            state.currentIndex = 0;
-            renderGrid();
-            renderQuestion();
-            saveState();
         });
     }
 }
