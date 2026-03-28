@@ -1684,10 +1684,12 @@ var BADGE_CLASS = {
     single: '', multiple: 'type-multiple', tf: 'type-tf',
     fill: 'type-fill', short: 'type-short', analysis: 'type-analysis'
 };
-var SCORABLE = ['single', 'multiple', 'tf'];
+var SCORABLE = ['single', 'multiple', 'tf', 'fill'];
 
 // ===== State =====
 var quizData = [];
+var quizMap = {};  // id -> index HashMap for O(1) lookup
+var autoJumpTimer = null;
 var state = {
     currentIndex: 0,
     answers: {},
@@ -1697,7 +1699,9 @@ var state = {
     theme: 'light',
     redoMode: false,
     redoQuestionIds: [],
-    savedSnapshot: null
+    savedSnapshot: null,
+    bookmarked: [],
+    shuffleOrder: null
 };
 
 // ===== DOM Cache =====
@@ -1738,6 +1742,16 @@ function initDom() {
     dom.searchInput = document.getElementById('search-input');
     dom.themeToggle = document.getElementById('theme-toggle');
     dom.modalTitle = document.getElementById('modal-title');
+    dom.bookmarkBtn = document.getElementById('bookmark-btn');
+    dom.exportBtn = document.getElementById('export-btn');
+    dom.importBtn = document.getElementById('import-btn');
+    dom.importFile = document.getElementById('import-file');
+    dom.shuffleToggle = document.getElementById('shuffle-toggle');
+    dom.searchClear = document.getElementById('search-clear');
+    dom.confirmModal = document.getElementById('confirm-modal');
+    dom.confirmMsg = document.getElementById('confirm-message');
+    dom.confirmOk = document.getElementById('confirm-ok');
+    dom.confirmCancel = document.getElementById('confirm-cancel');
 }
 
 // ===== Utilities =====
@@ -1749,6 +1763,14 @@ function esc(s) {
 function formatText(t) {
     if (!t) return '';
     return esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
+}
+
+var _confirmCallback = null;
+function showConfirm(message, onConfirm) {
+    dom.confirmMsg.textContent = message;
+    _confirmCallback = onConfirm;
+    dom.confirmModal.classList.remove('hidden');
+    dom.confirmOk.focus();
 }
 
 // ===== Parser =====
@@ -1823,6 +1845,8 @@ function getFiltered() {
     if (state.filter !== 'all') {
         if (state.filter === 'wrong') {
             list = list.filter(function(q) { return isRevealed(q) && isScorable(q) && !checkCorrect(q); });
+        } else if (state.filter === 'bookmarked') {
+            list = list.filter(function(q) { return state.bookmarked.indexOf(q.id) !== -1; });
         } else {
             list = list.filter(function(q) { return q.type === state.filter; });
         }
@@ -1832,6 +1856,15 @@ function getFiltered() {
         list = list.filter(function(q) {
             return q.text.toLowerCase().indexOf(kw) !== -1 ||
                    (q.options && q.options.some(function(o) { return o.text.toLowerCase().indexOf(kw) !== -1; }));
+        });
+    }
+    // Apply shuffle order if enabled
+    if (state.shuffleOrder && list.length > 0) {
+        var orderMap = {};
+        state.shuffleOrder.forEach(function(id, i) { orderMap[id] = i; });
+        list = list.slice().sort(function(a, b) {
+            return (orderMap[a.id] !== undefined ? orderMap[a.id] : a.id) -
+                   (orderMap[b.id] !== undefined ? orderMap[b.id] : b.id);
         });
     }
     return list;
@@ -1874,6 +1907,9 @@ function checkCorrect(q) {
     if (q.type === 'multiple') {
         return ua.split('').sort().join('') === q.answer.split('').sort().join('');
     }
+    if (q.type === 'fill') {
+        return ua.trim().replace(/\s+/g, '') === q.answer.trim().replace(/\s+/g, '');
+    }
     return ua === q.answer;
 }
 
@@ -1891,6 +1927,7 @@ function renderGrid() {
             hide = q.type !== state.filter;
         }
         if (hide) cls += ' hidden-by-filter';
+        if (state.bookmarked.indexOf(q.id) !== -1) cls += ' bookmarked';
         if (isRevealed(q)) {
             if (isScorable(q)) {
                 cls += checkCorrect(q) ? ' correct' : ' incorrect';
@@ -1898,7 +1935,13 @@ function renderGrid() {
                 cls += ' revealed';
             }
         }
-        html += '<button class="' + cls + '" data-id="' + q.id + '">' + q.id + '</button>';
+        var statusText = '';
+        if (isRevealed(q)) {
+            if (isScorable(q)) statusText = checkCorrect(q) ? ' 正确' : ' 错误';
+            else statusText = ' 已查看';
+        } else { statusText = ' 未答'; }
+        var bmText = state.bookmarked.indexOf(q.id) !== -1 ? ' 已收藏' : '';
+        html += '<button class="' + cls + '" data-id="' + q.id + '" aria-label="第' + q.id + '题 ' + (TYPE_LABELS[q.type] || '') + statusText + bmText + '">' + q.id + '</button>';
     });
     dom.grid.innerHTML = html;
     updateGridActive();
@@ -1926,6 +1969,7 @@ function updateGridButton(q) {
         hide = q.type !== state.filter;
     }
     if (hide) btn.classList.add('hidden-by-filter');
+    if (state.bookmarked.indexOf(q.id) !== -1) btn.classList.add('bookmarked');
     if (isRevealed(q)) {
         if (isScorable(q)) {
             btn.classList.add(checkCorrect(q) ? 'correct' : 'incorrect');
@@ -1940,9 +1984,19 @@ function updateGridButton(q) {
 
 // ===== Render Question =====
 function renderQuestion() {
+    // Trigger fade-in animation on card transition
+    var card = document.getElementById('question-card');
+    if (card) {
+        card.classList.remove('fade-in');
+        void card.offsetWidth; // force reflow
+        card.classList.add('fade-in');
+    }
+
     var filtered = getFiltered();
     if (filtered.length === 0) {
-        dom.text.innerHTML = '<div class="loading-screen"><p>该分类下暂无题目</p></div>';
+        dom.text.innerHTML = '<div class="loading-screen"><p>' +
+            (state.searchQuery ? '未找到包含"' + esc(state.searchQuery) + '"的题目，请尝试其他关键词' : '该分类下暂无题目') +
+            '</p></div>';
         dom.options.innerHTML = '';
         dom.showBtn.classList.add('hidden');
         dom.ansContent.classList.add('hidden');
@@ -1975,6 +2029,8 @@ function renderQuestion() {
         dom.options.innerHTML = buildMultiOpts(q, revealed, userAns);
     } else if (q.type === 'tf') {
         dom.options.innerHTML = buildTfOpts(q, revealed, userAns);
+    } else if (q.type === 'fill') {
+        dom.options.innerHTML = buildFillInput(q, revealed, userAns);
     } else {
         dom.options.innerHTML = '';
     }
@@ -2021,6 +2077,11 @@ function renderQuestion() {
     dom.next.disabled = state.currentIndex >= filtered.length - 1;
     dom.progress.textContent = (state.currentIndex + 1) + ' / ' + filtered.length;
 
+    // Bookmark button
+    if (dom.bookmarkBtn) {
+        dom.bookmarkBtn.classList.toggle('active', state.bookmarked.indexOf(q.id) !== -1);
+    }
+
     updateGridActive();
     saveState();
 }
@@ -2048,7 +2109,11 @@ function buildMultiOpts(q, revealed, userAns) {
     if (!q.options) return '';
     var sel = userAns ? userAns.split('') : [];
     var cor = q.answer.split('');
-    var h = '';
+    var hint = '';
+    if (!revealed) {
+        hint = '<div class="multi-hint">请选择 ' + cor.length + ' 项 · 已选 ' + sel.length + ' 项</div>';
+    }
+    var h = hint;
     q.options.forEach(function(o) {
         var c = 'option-card';
         if (revealed) {
@@ -2082,6 +2147,28 @@ function buildTfOpts(q, revealed, userAns) {
     });
     h += '</div>';
     return h;
+}
+
+function buildFillInput(q, revealed, userAns) {
+    if (revealed) {
+        var ok = checkCorrect(q);
+        var color = ok ? 'var(--correct)' : 'var(--incorrect)';
+        var border = ok ? 'var(--correct)' : 'var(--incorrect)';
+        return '<div class="fill-result">' +
+            '<div class="fill-your-answer" style="border-color:' + border + '">' +
+            '<span class="fill-label">你的答案</span>' +
+            '<span class="fill-value" style="color:' + color + '">' + esc(userAns || '(未作答)') + '</span>' +
+            '</div>' +
+            '<div class="fill-correct-answer">' +
+            '<span class="fill-label">正确答案</span>' +
+            '<span class="fill-value">' + formatText(q.answer) + '</span>' +
+            '</div>' +
+            '</div>';
+    }
+    var val = userAns || '';
+    return '<div class="fill-input-wrap">' +
+        '<input type="text" id="fill-input" class="fill-input" placeholder="请输入答案..." value="' + esc(val) + '" autocomplete="off">' +
+        '</div>';
 }
 
 // ===== Stats =====
@@ -2148,9 +2235,13 @@ function revealAnswer() {
     }
 
     // Auto-jump to next question on correct answer (scorable types)
+    if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; }
     if (isScorable(q) && checkCorrect(q) && state.currentIndex < filtered.length - 1) {
-        setTimeout(function() {
-            goNext();
+        var jumpIdx = state.currentIndex;
+        autoJumpTimer = setTimeout(function() {
+            autoJumpTimer = null;
+            var cur = getFiltered()[state.currentIndex];
+            if (cur && cur.id === q.id) goNext();
         }, 1200);
     }
 
@@ -2175,8 +2266,8 @@ function goTo(idx) {
     renderQuestion();
 }
 
-function goPrev() { goTo(state.currentIndex - 1); }
-function goNext() { goTo(state.currentIndex + 1); }
+function goPrev() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } goTo(state.currentIndex - 1); }
+function goNext() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } goTo(state.currentIndex + 1); }
 
 // ===== Redo Mode =====
 function enterRedoMode() {
@@ -2416,19 +2507,78 @@ function restart() {
         exitRedoMode(true);
         return;
     }
-    state.answers = {};
-    state.revealed = [];
-    state.currentIndex = 0;
-    state.filter = 'all';
-    dom.filters.querySelectorAll('button').forEach(function(btn) {
-        btn.classList.toggle('active', btn.dataset.filter === 'all');
+    showConfirm('确定要重新开始吗？所有答题进度将被清除。', function() {
+        state.answers = {};
+        state.revealed = [];
+        state.currentIndex = 0;
+        state.filter = 'all';
+        dom.filters.querySelectorAll('button').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.filter === 'all');
+        });
+        renderGrid();
+        renderQuestion();
+        updateStats();
+        saveState();
+        dom.modal.classList.add('hidden');
+        dom.modal.classList.remove('closing');
     });
-    renderGrid();
-    renderQuestion();
-    updateStats();
-    saveState();
-    dom.modal.classList.add('hidden');
-    dom.modal.classList.remove('closing');
+}
+
+// ===== Export / Import =====
+function exportProgress() {
+    var data = {
+        v: STORAGE_VERSION,
+        exportTime: new Date().toISOString(),
+        currentIndex: state.currentIndex,
+        answers: state.answers,
+        revealed: state.revealed,
+        filter: state.filter,
+        theme: state.theme,
+        bookmarked: state.bookmarked
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'java-quiz-progress-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importProgress(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var d = JSON.parse(e.target.result);
+            if (!d || !d.answers) {
+                showConfirm('导入失败：文件格式不正确', function() {});
+                return;
+            }
+            showConfirm('导入将覆盖当前进度，确定继续吗？', function() {
+                state.answers = d.answers || {};
+                state.revealed = d.revealed || [];
+                state.filter = d.filter || 'all';
+                state.theme = d.theme || 'light';
+                state.bookmarked = d.bookmarked || [];
+                state.currentIndex = d.currentIndex || 0;
+                state.redoMode = false;
+                state.redoQuestionIds = [];
+                state.savedSnapshot = null;
+                applyTheme();
+                dom.filters.querySelectorAll('button').forEach(function(btn) {
+                    btn.classList.toggle('active', btn.dataset.filter === state.filter);
+                });
+                hideRedoBanner();
+                renderGrid();
+                renderQuestion();
+                updateStats();
+                saveState();
+            });
+        } catch (err) {
+            showConfirm('导入失败：无法解析文件', function() {});
+        }
+    };
+    reader.readAsText(file);
 }
 
 // ===== Theme =====
@@ -2453,6 +2603,7 @@ function applyTheme() {
 // ===== Persistence =====
 var STORAGE_VERSION = 3;
 
+var _storageWarned = false;
 function saveState() {
     try {
         localStorage.setItem('quiz_state', JSON.stringify({
@@ -2464,9 +2615,20 @@ function saveState() {
             theme: state.theme,
             redoMode: state.redoMode,
             redoQuestionIds: state.redoQuestionIds,
-            savedSnapshot: state.savedSnapshot
+            savedSnapshot: state.savedSnapshot,
+            bookmarked: state.bookmarked,
+            shuffleOrder: state.shuffleOrder
         }));
-    } catch (e) { console.warn('saveState:', e.message); }
+        _storageWarned = false;
+    } catch (e) {
+        console.warn('saveState:', e.message);
+        if (!_storageWarned) {
+            _storageWarned = true;
+            showConfirm('存储空间不足，建议导出进度备份后清理浏览器数据。是否现在导出？', function() {
+                exportProgress();
+            });
+        }
+    }
 }
 
 function loadState() {
@@ -2483,6 +2645,8 @@ function loadState() {
         state.redoMode = d.redoMode || false;
         state.redoQuestionIds = d.redoQuestionIds || [];
         state.savedSnapshot = d.savedSnapshot || null;
+        state.bookmarked = d.bookmarked || [];
+        state.shuffleOrder = d.shuffleOrder || null;
     } catch (e) { console.warn('loadState:', e.message); }
 }
 
@@ -2493,7 +2657,35 @@ function bindEvents() {
         if (el) selectOption(el.dataset.label);
     });
 
+    // Fill-in-the-blank input handling
+    dom.options.addEventListener('input', function(e) {
+        if (e.target.id === 'fill-input') {
+            var filtered = getFiltered();
+            if (!filtered.length) return;
+            var q = filtered[state.currentIndex];
+            if (!q || isRevealed(q)) return;
+            state.answers[q.id] = e.target.value;
+            dom.showBtn.disabled = !e.target.value.trim();
+        }
+    });
+
     dom.showBtn.addEventListener('click', revealAnswer);
+
+    if (dom.bookmarkBtn) {
+        dom.bookmarkBtn.addEventListener('click', function() {
+            var filtered = getFiltered();
+            if (!filtered.length) return;
+            var q = filtered[state.currentIndex];
+            if (!q) return;
+            var idx = state.bookmarked.indexOf(q.id);
+            if (idx === -1) state.bookmarked.push(q.id);
+            else state.bookmarked.splice(idx, 1);
+            dom.bookmarkBtn.classList.toggle('active', idx === -1);
+            updateGridButton(q);
+            saveState();
+        });
+    }
+
     dom.prev.addEventListener('click', goPrev);
     dom.next.addEventListener('click', goNext);
 
@@ -2525,8 +2717,28 @@ function bindEvents() {
     });
     dom.modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
 
+    // Confirm modal events
+    dom.confirmCancel.addEventListener('click', function() {
+        dom.confirmModal.classList.add('hidden');
+        _confirmCallback = null;
+    });
+    dom.confirmOk.addEventListener('click', function() {
+        dom.confirmModal.classList.add('hidden');
+        if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
+    });
+    dom.confirmModal.querySelector('.modal-overlay').addEventListener('click', function() {
+        dom.confirmModal.classList.add('hidden');
+        _confirmCallback = null;
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
+        // Confirm modal handling
+        if (!dom.confirmModal.classList.contains('hidden')) {
+            if (e.key === 'Escape') { dom.confirmModal.classList.add('hidden'); _confirmCallback = null; e.preventDefault(); }
+            else if (e.key === 'Enter') { dom.confirmOk.click(); e.preventDefault(); }
+            return;
+        }
         // Focus trap for modal
         if (!dom.modal.classList.contains('hidden')) {
             if (e.key === 'Escape') { closeModal(); e.preventDefault(); return; }
@@ -2591,6 +2803,7 @@ function bindEvents() {
         var searchTimer = null;
         dom.searchInput.addEventListener('input', function() {
             var val = this.value.trim();
+            if (dom.searchClear) dom.searchClear.classList.toggle('hidden', !val);
             if (searchTimer) clearTimeout(searchTimer);
             searchTimer = setTimeout(function() {
                 state.searchQuery = val;
@@ -2599,6 +2812,18 @@ function bindEvents() {
                 renderQuestion();
                 searchTimer = null;
             }, 200);
+        });
+    }
+
+    // Search clear button
+    if (dom.searchClear) {
+        dom.searchClear.addEventListener('click', function() {
+            if (dom.searchInput) { dom.searchInput.value = ''; dom.searchInput.focus(); }
+            dom.searchClear.classList.add('hidden');
+            state.searchQuery = '';
+            state.currentIndex = 0;
+            renderGrid();
+            renderQuestion();
         });
     }
 
@@ -2627,6 +2852,42 @@ function bindEvents() {
     if (dom.themeToggle) {
         dom.themeToggle.addEventListener('click', toggleTheme);
     }
+
+    // Export / Import
+    if (dom.exportBtn) {
+        dom.exportBtn.addEventListener('click', exportProgress);
+    }
+    if (dom.importBtn && dom.importFile) {
+        dom.importBtn.addEventListener('click', function() { dom.importFile.click(); });
+        dom.importFile.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                importProgress(this.files[0]);
+                this.value = '';
+            }
+        });
+    }
+
+    // Shuffle toggle
+    if (dom.shuffleToggle) {
+        dom.shuffleToggle.addEventListener('change', function() {
+            if (this.checked) {
+                // Generate shuffled order
+                var indices = [];
+                for (var i = 0; i < quizData.length; i++) indices.push(i);
+                for (var i = indices.length - 1; i > 0; i--) {
+                    var j = Math.floor(Math.random() * (i + 1));
+                    var tmp = indices[i]; indices[i] = indices[j]; indices[j] = tmp;
+                }
+                state.shuffleOrder = indices.map(function(i) { return quizData[i].id; });
+            } else {
+                state.shuffleOrder = null;
+            }
+            state.currentIndex = 0;
+            renderGrid();
+            renderQuestion();
+            saveState();
+        });
+    }
 }
 
 // ===== Init =====
@@ -2639,6 +2900,9 @@ function init() {
     }
 
     quizData = parseQuestions(RAW_MD);
+    // Build id -> index HashMap
+    quizMap = {};
+    for (var i = 0; i < quizData.length; i++) { quizMap[quizData[i].id] = i; }
     if (quizData.length === 0) {
         dom.text.innerHTML = '<div class="error-message"><h3>无法加载题库</h3><p>没有解析到任何题目</p></div>';
         return;
@@ -2672,4 +2936,9 @@ function init() {
 }
 
 init();
+
+// Register Service Worker for offline support
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function() {});
+}
 })();

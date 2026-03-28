@@ -1,0 +1,16 @@
+{
+  "name": "Java 鷋试编程语言题库",
+  "short_name": "Java Quiz",
+  "description": "Java 编程语言在线刷题，194 道选择题、判断题、填空题、简答题，含答案解析。",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

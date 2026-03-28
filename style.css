@@ -152,7 +152,7 @@ button:focus:not(:focus-visible) { outline: none; }
     align-items: center;
 }
 .sidebar-toggle {
-    display: none;
+    display: flex;
     width: 42px;
     height: 42px;
     border-radius: var(--radius-sm);
@@ -161,6 +161,62 @@ button:focus:not(:focus-visible) { outline: none; }
     transition: background 0.15s;
 }
 .sidebar-toggle:hover { background: var(--bg-hover); }
+
+.header-icon-btn {
+    width: 38px; height: 38px;
+    border-radius: var(--radius-sm);
+    border: none; background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+}
+.header-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Fill-in-the-blank */
+.fill-input-wrap { margin-top: 12px; }
+.fill-input {
+    width: 100%;
+    max-width: 480px;
+    padding: 12px 16px;
+    font-size: 1rem;
+    border: 2px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.2s;
+}
+.fill-input:focus { border-color: var(--primary); }
+.fill-input::placeholder { color: var(--text-muted); }
+.fill-result { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.fill-your-answer, .fill-correct-answer {
+    padding: 10px 14px; border-radius: var(--radius-md);
+    background: var(--bg-secondary); border-left: 3px solid var(--border-medium);
+}
+.fill-correct-answer { border-left-color: var(--correct); }
+.fill-label { font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+.fill-value { font-weight: 600; }
+
+/* Shuffle toggle */
+.shuffle-toggle {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; font-size: 0.8rem;
+    color: var(--text-muted); cursor: pointer;
+    user-select: none;
+}
+.shuffle-toggle input { accent-color: var(--primary); }
+
+/* Multi-select hint */
+.multi-hint {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    display: inline-block;
+}
 .hamburger-icon, .hamburger-icon::before, .hamburger-icon::after {
     display: block;
     width: 20px;
@@ -363,6 +419,15 @@ button:focus:not(:focus-visible) { outline: none; }
     background-position: center;
     pointer-events: none;
 }
+.search-clear {
+    position: absolute;
+    right: 6px; top: 50%; transform: translateY(-50%);
+    background: none; border: none;
+    font-size: 1.2rem; color: var(--text-muted);
+    cursor: pointer; padding: 2px 6px; line-height: 1;
+    border-radius: var(--radius-sm);
+}
+.search-clear:hover { color: var(--text-primary); background: var(--bg-hover); }
 
 /* Question Grid */
 #question-grid {
@@ -373,6 +438,7 @@ button:focus:not(:focus-visible) { outline: none; }
 .grid-btn {
     aspect-ratio: 1;
     border: 1.5px solid var(--border-medium);
+    position: relative;
     background: var(--bg-primary);
     border-radius: var(--radius-sm);
     font-size: 0.8rem;
@@ -1049,6 +1115,53 @@ button:focus:not(:focus-visible) { outline: none; }
     .redo-banner { flex-direction: column; gap: 8px; text-align: center; }
 }
 
+/* ===== Question Card Fade-in ===== */
+#question-card.fade-in {
+    animation: cardFadeIn 0.25s ease-out;
+}
+@keyframes cardFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Confirm Modal ===== */
+.confirm-message {
+    text-align: center;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding: 8px 0;
+}
+
+/* ===== Bookmark ===== */
+.bookmark-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px;
+    margin-left: auto;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+.bookmark-btn:hover { color: #f59e0b; }
+.bookmark-btn.active { color: #f59e0b; }
+.bookmark-btn.active svg { fill: #f59e0b; }
+.grid-btn.bookmarked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    background: #f59e0b;
+    border-radius: 50%;
+}
+.dot-bookmarked { background: #f59e0b; }
+[data-theme="dark"] .bookmark-btn.active { color: #fbbf24; }
+[data-theme="dark"] .bookmark-btn.active svg { fill: #fbbf24; }
+
 /* ===== Redo Mode Banner ===== */
 .redo-banner {
     display: flex;
@@ -1100,11 +1213,6 @@ button:focus:not(:focus-visible) { outline: none; }
 }
 [data-theme="dark"] .redo-banner-text {
     color: #fbbf24;
-}
-
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 /* ===== Reduced Motion ===== */

@@ -15,6 +15,8 @@
     <meta name="description" content="Java 编程语言在线刷题，194 道选择题、判断题、填空题、简答题，含答案解析。">
     <title>Java 编程语言题库 - 在线刷题</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -35,6 +37,13 @@
             <span class="stat-item stat-incorrect">错误 <strong id="stat-incorrect">0</strong></span>
         </div>
         <div class="header-actions">
+            <button id="export-btn" class="header-icon-btn" aria-label="导出进度" title="导出进度">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+            <button id="import-btn" class="header-icon-btn" aria-label="导入进度" title="导入进度">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </button>
+            <input type="file" id="import-file" accept=".json" style="display:none">
             <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板">
                 <span class="hamburger-icon"></span>
             </button>
@@ -79,16 +88,23 @@
                 <button data-filter="short" role="tab" aria-selected="false">简答</button>
                 <button data-filter="analysis" role="tab" aria-selected="false">分析</button>
                 <button data-filter="wrong" role="tab" aria-selected="false">错题重做</button>
+                <button data-filter="bookmarked" role="tab" aria-selected="false">已收藏</button>
             </div>
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="搜索题目关键词..." aria-label="搜索题目">
+                <button id="search-clear" class="search-clear hidden" aria-label="清除搜索">&times;</button>
             </div>
+            <label class="shuffle-toggle">
+                <input type="checkbox" id="shuffle-toggle">
+                <span class="shuffle-label">随机顺序</span>
+            </label>
             <div id="question-grid"></div>
             <div class="sidebar-legend">
                 <span class="legend-item"><span class="dot dot-unanswered"></span>未答</span>
                 <span class="legend-item"><span class="dot dot-correct"></span>正确</span>
                 <span class="legend-item"><span class="dot dot-incorrect"></span>错误</span>
                 <span class="legend-item"><span class="dot dot-revealed"></span>已看</span>
+                <span class="legend-item"><span class="dot dot-bookmarked"></span>收藏</span>
             </div>
         </aside>
 
@@ -97,6 +113,9 @@
                 <div class="question-header">
                     <span class="question-badge" id="question-badge">加载中...</span>
                     <span class="question-number" id="question-number"></span>
+                    <button id="bookmark-btn" class="bookmark-btn" aria-label="收藏题目" title="收藏此题">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    </button>
                 </div>
                 <div class="question-text" id="question-text"></div>
                 <div class="question-options" id="question-options"></div>
@@ -132,6 +151,18 @@
             <div class="modal-actions">
                 <button id="review-btn" class="btn-nav">查看答题情况</button>
                 <button id="restart-btn" class="btn-submit">重新开始</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <h2 id="confirm-title">确认操作</h2>
+            <div id="confirm-message" class="confirm-message"></div>
+            <div class="modal-actions">
+                <button id="confirm-cancel" class="btn-nav">取消</button>
+                <button id="confirm-ok" class="btn-submit">确认</button>
             </div>
         </div>
     </div>
