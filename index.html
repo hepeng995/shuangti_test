@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#fafafa">
+    <meta name="theme-color" content="#f8fafc">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta property="og:title" content="Java 编程语言题库 - 在线刷题">
-    <meta property="og:description" content="共 194 道 Java 基础题，支持在线练习、答案解析、进度追踪。">
+    <meta property="og:title" content="题库刷题 — 在线练习平台">
+    <meta property="og:description" content="支持多题库在线刷题，选择题库开始练习。">
     <meta property="og:type" content="website">
-    <meta name="description" content="Java 编程语言在线刷题，194 道选择题、判断题、填空题、简答题，含答案解析。">
-    <title>Java 编程语言题库 - 在线刷题</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+    <meta name="description" content="在线刷题平台，支持多题库、答案解析、进度追踪。">
+    <title>题库刷题 — 在线练习平台</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -29,22 +29,25 @@
     </noscript>
     <header id="app-header">
         <div class="header-left">
-            <h1>Java 编程语言题库</h1>
-            <span class="header-subtitle">共 194 题 · 在线刷题</span>
+            <h1>题库刷题</h1>
+            <span class="header-subtitle">选择题库开始练习</span>
         </div>
         <div class="header-stats" id="header-stats">
-            <span class="stat-item">已答 <strong id="stat-answered">0</strong> / <strong id="stat-total">194</strong></span>
+            <span class="stat-item">已答 <strong id="stat-answered">0</strong> / <strong id="stat-total">--</strong></span>
             <span class="stat-item stat-correct">正确 <strong id="stat-correct">0</strong></span>
             <span class="stat-item stat-incorrect">错误 <strong id="stat-incorrect">0</strong></span>
         </div>
         <div class="header-actions">
+            <button id="back-to-list-btn" class="header-icon-btn hidden" aria-label="返回题单" title="返回题单">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
             <button id="export-btn" class="header-icon-btn" aria-label="导出进度" title="导出进度">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <button id="import-btn" class="header-icon-btn" aria-label="导入进度" title="导入进度">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </button>
-            <input type="file" id="import-file" accept=".json" style="display:none">
+            <input type="file" id="import-file" accept=".json" style="display:none" aria-label="导入进度文件">
             <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板" title="切换题号面板">
                 <span class="hamburger-icon"></span>
             </button>
@@ -55,92 +58,105 @@
         </div>
     </header>
 
-    <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden></div>
-    <div id="app-container">        <aside id="sidebar">
-            <div class="sidebar-stats" id="sidebar-stats">
-                <div class="sidebar-stat-card stat-answered-card">
-                    <div class="stat-num" id="sidebar-answered">0</div>
-                    <div class="stat-label">已答</div>
-                </div>
-                <div class="sidebar-stat-card stat-correct-card">
-                    <div class="stat-num" id="sidebar-correct">0</div>
-                    <div class="stat-label">正确</div>
-                </div>
-                <div class="sidebar-stat-card stat-incorrect-card">
-                    <div class="stat-num" id="sidebar-incorrect">0</div>
-                    <div class="stat-label">错误</div>
-                </div>
-            </div>
-            <div class="progress-bar-wrap" id="progress-bar-wrap">
-                <div class="progress-bar-label">
-                    <span>完成进度</span>
-                    <span id="progress-pct" role="status">0%</span>
-                </div>
-                <div class="progress-bar-track">
-                    <div class="progress-bar-fill" id="progress-fill"></div>
-                </div>
-            </div>
-            <div class="filter-tabs" id="filter-tabs" role="tablist" aria-label="题目类型筛选">
-                <button data-filter="all" class="active" role="tab" aria-selected="true">全部</button>
-                <button data-filter="single" role="tab" aria-selected="false">单选</button>
-                <button data-filter="multiple" role="tab" aria-selected="false">多选</button>
-                <button data-filter="tf" role="tab" aria-selected="false">判断</button>
-                <button data-filter="fill" role="tab" aria-selected="false">填空</button>
-                <button data-filter="short" role="tab" aria-selected="false">简答</button>
-                <button data-filter="analysis" role="tab" aria-selected="false">分析</button>
-                <button data-filter="wrong" role="tab" aria-selected="false">错题重做</button>
-                <button data-filter="bookmarked" role="tab" aria-selected="false">已收藏</button>
-            </div>
-            <div class="search-box">
-                <input type="text" id="search-input" placeholder="搜索题目关键词..." aria-label="搜索题目">
-                <button id="search-clear" class="search-clear hidden" aria-label="清除搜索">&times;</button>
-                <span class="search-count hidden" id="search-count" aria-live="polite"></span>
-            </div>
-            <div id="question-grid"></div>
-            <div class="sidebar-legend">
-                <span class="legend-item"><span class="dot dot-unanswered"></span>未答</span>
-                <span class="legend-item"><span class="dot dot-correct"></span>正确</span>
-                <span class="legend-item"><span class="dot dot-incorrect"></span>错误</span>
-                <span class="legend-item"><span class="dot dot-revealed"></span>已看</span>
-                <span class="legend-item"><span class="dot dot-bookmarked"></span>收藏</span>
-            </div>
-        </aside>
+    <!-- ===== Select Page (Home) ===== -->
+    <section id="select-page">
+        <div class="select-page-container">
+            <div id="banks-container" class="banks-grid"></div>
+        </div>
+    </section>
 
-        <main id="main-content">
-            <div id="question-card">
-                <div class="question-header">
-                    <span class="question-badge" id="question-badge">加载中...</span>
-                    <span class="question-number" id="question-number"></span>
-                    <button id="bookmark-btn" class="bookmark-btn" aria-label="收藏题目" title="收藏此题">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                    </button>
+    <!-- ===== Quiz Page ===== -->
+    <section id="quiz-page" class="hidden">
+        <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+        <div id="app-container">
+            <aside id="sidebar" aria-label="题目导航">
+                <div class="sidebar-stats" id="sidebar-stats">
+                    <div class="sidebar-stat-card stat-answered-card">
+                        <div class="stat-num" id="sidebar-answered">0</div>
+                        <div class="stat-label">已答</div>
+                    </div>
+                    <div class="sidebar-stat-card stat-correct-card">
+                        <div class="stat-num" id="sidebar-correct">0</div>
+                        <div class="stat-label">正确</div>
+                    </div>
+                    <div class="sidebar-stat-card stat-incorrect-card">
+                        <div class="stat-num" id="sidebar-incorrect">0</div>
+                        <div class="stat-label">错误</div>
+                    </div>
                 </div>
-                <div class="question-text" id="question-text"></div>
-                <div class="question-options" id="question-options"></div>
-                <div class="answer-section" id="answer-section">
-                    <button id="show-answer-btn" class="btn-show-answer">显示答案与解析</button>
-                    <div id="answer-content" class="answer-content hidden" aria-live="polite">
-                        <div class="correct-answer">
-                            <span class="answer-label">正确答案</span>
-                            <div class="answer-value" id="correct-answer-text"></div>
-                        </div>
-                        <div class="explanation" id="explanation-area">
-                            <span class="answer-label">解析</span>
-                            <div class="explanation-value" id="explanation-text"></div>
+                <div class="progress-bar-wrap" id="progress-bar-wrap">
+                    <div class="progress-bar-label">
+                        <span>完成进度</span>
+                        <span id="progress-pct" role="status">0%</span>
+                    </div>
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill" id="progress-fill"></div>
+                    </div>
+                </div>
+                <div class="filter-tabs" id="filter-tabs" role="tablist" aria-label="题目类型筛选">
+                    <button data-filter="all" class="active" role="tab" aria-selected="true" aria-controls="question-grid">全部</button>
+                    <button data-filter="single" role="tab" aria-selected="false" aria-controls="question-grid">单选</button>
+                    <button data-filter="multiple" role="tab" aria-selected="false" aria-controls="question-grid">多选</button>
+                    <button data-filter="tf" role="tab" aria-selected="false" aria-controls="question-grid">判断</button>
+                    <button data-filter="fill" role="tab" aria-selected="false" aria-controls="question-grid">填空</button>
+                    <button data-filter="short" role="tab" aria-selected="false" aria-controls="question-grid">简答</button>
+                    <button data-filter="analysis" role="tab" aria-selected="false" aria-controls="question-grid">分析</button>
+                    <button data-filter="wrong" role="tab" aria-selected="false" aria-controls="question-grid">错题重做</button>
+                    <button data-filter="bookmarked" role="tab" aria-selected="false" aria-controls="question-grid">已收藏</button>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="搜索题目关键词..." aria-label="搜索题目">
+                    <button id="search-clear" class="search-clear hidden" aria-label="清除搜索">&times;</button>
+                    <span class="search-count hidden" id="search-count" aria-live="polite"></span>
+                </div>
+                <div id="question-grid" role="tabpanel" aria-label="题目列表"></div>
+                <div class="sidebar-legend">
+                    <span class="legend-item"><span class="dot dot-unanswered"></span>未答</span>
+                    <span class="legend-item"><span class="dot dot-correct"></span>正确</span>
+                    <span class="legend-item"><span class="dot dot-incorrect"></span>错误</span>
+                    <span class="legend-item"><span class="dot dot-revealed"></span>已看</span>
+                    <span class="legend-item"><span class="dot dot-bookmarked"></span>收藏</span>
+                </div>
+            </aside>
+
+            <main id="main-content">
+                <div id="question-card">
+                    <div class="question-header">
+                        <span class="question-badge" id="question-badge">加载中...</span>
+                        <span class="question-number" id="question-number"></span>
+                        <button id="bookmark-btn" class="bookmark-btn" aria-label="收藏题目" title="收藏此题">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                        </button>
+                    </div>
+                    <div class="question-text" id="question-text"></div>
+                    <div class="question-options" id="question-options"></div>
+                    <div class="answer-section" id="answer-section">
+                        <button id="show-answer-btn" class="btn-show-answer">显示答案与解析</button>
+                        <div id="answer-content" class="answer-content hidden" aria-live="polite">
+                            <div id="answer-feedback" class="sr-only" aria-live="polite"></div>
+                            <div class="correct-answer">
+                                <span class="answer-label">正确答案</span>
+                                <div class="answer-value" id="correct-answer-text"></div>
+                            </div>
+                            <div class="explanation" id="explanation-area">
+                                <span class="answer-label">解析</span>
+                                <div class="explanation-value" id="explanation-text"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="navigation-bar">
-                <button id="prev-btn" class="btn-nav">上一题</button>
-                <span class="nav-progress" id="nav-progress">1 / 194</span>
-                <button id="next-btn" class="btn-nav">下一题</button>
-                <button id="submit-btn" class="btn-submit">查看统计</button>
-            </div>
-        </main>
-    </div>
+                <div class="navigation-bar">
+                    <button id="prev-btn" class="btn-nav">上一题</button>
+                    <span class="nav-progress" id="nav-progress">-- / --</span>
+                    <button id="next-btn" class="btn-nav">下一题</button>
+                    <button id="submit-btn" class="btn-submit">查看统计</button>
+                </div>
+            </main>
+        </div>
+    </section>
 
+    <!-- ===== Modals ===== -->
     <div id="result-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="modal-overlay"></div>
         <div class="modal-content">
@@ -183,6 +199,82 @@
         </div>
     </div>
 
-    <script src="quiz.js"></script>
+    <!-- Scripts: load order matters -->
+    <script src="db.js"></script>
+    <script src="router.js"></script>
+    <script src="quiz-core.js"></script>
+    <script src="quiz-select.js"></script>
+    <!-- 题库文件 — 添加新题库只需加一行 -->
+    <script src="bank-java.js"></script>
+    <script>
+    // ===== Bootstrap =====
+    (function() {
+        // Register routes
+        Router.register('', function() { QuizSelect.showSelectPage(); animatePage('select-page'); });
+        Router.register('quiz', function(bankId) {
+            if (!bankId) { Router.navigate('/'); return; }
+            if (typeof destroyQuizPage === 'function') destroyQuizPage();
+            document.getElementById('select-page').classList.add('hidden');
+            document.getElementById('quiz-page').classList.remove('hidden');
+            animatePage('quiz-page');
+            // Restore header for quiz mode
+            restoreQuizHeader();
+            // Init quiz
+            initQuizPage(bankId);
+        });
+
+        // Back button in header
+        document.getElementById('back-to-list-btn').addEventListener('click', function() {
+            if (typeof destroyQuizPage === 'function') destroyQuizPage();
+            Router.navigate('/');
+        });
+
+        // Apply global theme on load
+        var savedTheme = localStorage.getItem('quiz_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = savedTheme === 'dark' ? '#0f172a' : '#f8fafc';
+
+        // Init modules
+        QuizSelect.init();
+
+        // Init DB then start router
+        QuizDB.init().then(function() {
+            Router.init();
+        }).catch(function(e) {
+            console.error('QuizDB init failed:', e);
+            // Fallback: still show select page
+            Router.init();
+        });
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(function() {});
+        }
+    })();
+
+    function restoreQuizHeader() {
+        var headerStats = document.getElementById('header-stats');
+        if (headerStats) headerStats.style.display = '';
+        var headerActions = document.querySelector('.header-actions');
+        if (headerActions) {
+            var btns = headerActions.querySelectorAll('button');
+            btns.forEach(function(b) {
+                b.style.display = '';
+            });
+        }
+        var backBtn = document.getElementById('back-to-list-btn');
+        if (backBtn) backBtn.classList.remove('hidden');
+    }
+
+    function animatePage(pageId) {
+        var page = document.getElementById(pageId);
+        if (!page) return;
+        page.classList.remove('page-entering');
+        // Force reflow to restart animation
+        void page.offsetWidth;
+        page.classList.add('page-entering');
+    }
+    </script>
 </body>
 </html>

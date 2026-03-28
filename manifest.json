@@ -1,14 +1,14 @@
 {
-  "name": "Java 鷋试编程语言题库",
-  "short_name": "Java Quiz",
-  "description": "Java 编程语言在线刷题，194 道选择题、判断题、填空题、简答题，含答案解析。",
-  "start_url": ".",
+  "name": "题库刷题 — 在线练习平台",
+  "short_name": "题库刷题",
+  "description": "在线刷题平台，支持多题库、答案解析、进度追踪。",
+  "start_url": "./#/",
   "display": "standalone",
-  "background_color": "#fafafa",
-  "theme_color": "#2563eb",
+  "background_color": "#f8fafc",
+  "theme_color": "#f8fafc",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>",
       "sizes": "any",
       "type": "image/svg+xml"
     }
