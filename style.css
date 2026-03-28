@@ -1046,6 +1046,65 @@ button:focus:not(:focus-visible) { outline: none; }
 
     /* Safe area for notch / home indicator */
     .navigation-bar { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+    .redo-banner { flex-direction: column; gap: 8px; text-align: center; }
+}
+
+/* ===== Redo Mode Banner ===== */
+.redo-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #fff7ed, #fef3c7);
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    animation: slideDown 0.3s ease;
+}
+.redo-banner-text {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #92400e;
+}
+.redo-banner-exit {
+    padding: 6px 16px;
+    border-radius: 16px;
+    background: var(--incorrect);
+    color: #fff;
+    border: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+.redo-banner-exit:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+}
+.redo-still-wrong {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--incorrect-bg);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    color: var(--incorrect);
+    line-height: 1.6;
+}
+.redo-still-wrong .label {
+    font-weight: 600;
+}
+[data-theme="dark"] .redo-banner {
+    background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.06));
+    border-color: rgba(245,158,11,0.4);
+}
+[data-theme="dark"] .redo-banner-text {
+    color: #fbbf24;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* ===== Reduced Motion ===== */

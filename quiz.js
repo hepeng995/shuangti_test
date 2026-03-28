@@ -1694,7 +1694,10 @@ var state = {
     revealed: [],
     filter: 'all',
     searchQuery: '',
-    theme: 'light'
+    theme: 'light',
+    redoMode: false,
+    redoQuestionIds: [],
+    savedSnapshot: null
 };
 
 // ===== DOM Cache =====
@@ -1734,6 +1737,7 @@ function initDom() {
     dom.progressPct = document.getElementById('progress-pct');
     dom.searchInput = document.getElementById('search-input');
     dom.themeToggle = document.getElementById('theme-toggle');
+    dom.modalTitle = document.getElementById('modal-title');
 }
 
 // ===== Utilities =====
@@ -1809,7 +1813,13 @@ function parseQuestions(md) {
 
 // ===== Helpers =====
 function getFiltered() {
-    var list = quizData;
+    var list;
+    if (state.redoMode) {
+        var ids = state.redoQuestionIds;
+        list = quizData.filter(function(q) { return ids.indexOf(q.id) !== -1; });
+        return list;
+    }
+    list = quizData;
     if (state.filter !== 'all') {
         if (state.filter === 'wrong') {
             list = list.filter(function(q) { return isRevealed(q) && isScorable(q) && !checkCorrect(q); });
@@ -1838,7 +1848,10 @@ function isRevealed(q) {
 // ===== Shared Stats Helper =====
 function getStats() {
     var answered = 0, correct = 0, incorrect = 0, viewed = 0;
-    quizData.forEach(function(q) {
+    var pool = state.redoMode
+        ? quizData.filter(function(q) { return state.redoQuestionIds.indexOf(q.id) !== -1; })
+        : quizData;
+    pool.forEach(function(q) {
         if (!isRevealed(q)) return;
         answered++;
         if (isScorable(q)) {
@@ -1850,8 +1863,8 @@ function getStats() {
     });
     return {
         answered: answered, correct: correct, incorrect: incorrect, viewed: viewed,
-        total: quizData.length,
-        scorableTotal: quizData.filter(function(q) { return isScorable(q); }).length
+        total: pool.length,
+        scorableTotal: pool.filter(function(q) { return isScorable(q); }).length
     };
 }
 
@@ -1870,7 +1883,9 @@ function renderGrid() {
     quizData.forEach(function(q) {
         var cls = 'grid-btn';
         var hide = false;
-        if (state.filter === 'wrong') {
+        if (state.redoMode) {
+            hide = state.redoQuestionIds.indexOf(q.id) === -1;
+        } else if (state.filter === 'wrong') {
             hide = !(isRevealed(q) && isScorable(q) && !checkCorrect(q));
         } else if (state.filter !== 'all') {
             hide = q.type !== state.filter;
@@ -1903,7 +1918,9 @@ function updateGridButton(q) {
     if (!btn) return;
     btn.className = 'grid-btn';
     var hide = false;
-    if (state.filter === 'wrong') {
+    if (state.redoMode) {
+        hide = state.redoQuestionIds.indexOf(q.id) === -1;
+    } else if (state.filter === 'wrong') {
         hide = !(isRevealed(q) && isScorable(q) && !checkCorrect(q));
     } else if (state.filter !== 'all') {
         hide = q.type !== state.filter;
@@ -2136,6 +2153,19 @@ function revealAnswer() {
             goNext();
         }, 1200);
     }
+
+    // Redo mode: update banner and check completion
+    if (state.redoMode) {
+        updateRedoBanner();
+        var allRevealed = state.redoQuestionIds.every(function(id) {
+            return state.revealed.indexOf(id) !== -1;
+        });
+        if (allRevealed) {
+            setTimeout(function() {
+                showRedoResults();
+            }, 800);
+        }
+    }
 }
 
 function goTo(idx) {
@@ -2148,7 +2178,193 @@ function goTo(idx) {
 function goPrev() { goTo(state.currentIndex - 1); }
 function goNext() { goTo(state.currentIndex + 1); }
 
+// ===== Redo Mode =====
+function enterRedoMode() {
+    var wrongIds = [];
+    quizData.forEach(function(q) {
+        if (isRevealed(q) && isScorable(q) && !checkCorrect(q)) {
+            wrongIds.push(q.id);
+        }
+    });
+
+    if (wrongIds.length === 0) {
+        dom.text.innerHTML = '<div class="loading-screen"><p>暂无错题，无法进入重做模式</p><p style="font-size:0.85rem;color:var(--text-muted)">请先正常答题并提交答案后，再做错题重做。</p></div>';
+        dom.options.innerHTML = '';
+        dom.showBtn.classList.add('hidden');
+        dom.ansContent.classList.add('hidden');
+        setTimeout(function() {
+            setFilter('all');
+        }, 1500);
+        return;
+    }
+
+    state.savedSnapshot = {
+        answers: JSON.parse(JSON.stringify(state.answers)),
+        revealed: state.revealed.slice()
+    };
+
+    state.redoMode = true;
+    state.redoQuestionIds = wrongIds;
+
+    wrongIds.forEach(function(id) {
+        delete state.answers[id];
+        var idx = state.revealed.indexOf(id);
+        if (idx !== -1) state.revealed.splice(idx, 1);
+    });
+
+    state.currentIndex = 0;
+
+    dom.filters.querySelectorAll('button').forEach(function(btn) {
+        btn.classList.remove('active');
+        if (btn.dataset.filter === 'wrong') btn.classList.add('active');
+    });
+
+    if (dom.searchInput) {
+        dom.searchInput.disabled = true;
+        dom.searchInput.value = '';
+        state.searchQuery = '';
+    }
+
+    showRedoBanner(wrongIds.length);
+    renderGrid();
+    renderQuestion();
+    updateStats();
+    saveState();
+}
+
+function exitRedoMode(mergeResults) {
+    if (!state.redoMode) return;
+
+    if (mergeResults && state.savedSnapshot) {
+        var origAnswers = state.savedSnapshot.answers;
+        var origRevealed = state.savedSnapshot.revealed;
+
+        state.redoQuestionIds.forEach(function(id) {
+            var q = null;
+            for (var i = 0; i < quizData.length; i++) {
+                if (quizData[i].id === id) { q = quizData[i]; break; }
+            }
+            if (q && state.revealed.indexOf(id) !== -1 && isScorable(q) && checkCorrect(q)) {
+                origAnswers[id] = state.answers[id];
+                if (origRevealed.indexOf(id) === -1) origRevealed.push(id);
+            }
+        });
+
+        state.answers = origAnswers;
+        state.revealed = origRevealed;
+    } else if (state.savedSnapshot) {
+        state.answers = state.savedSnapshot.answers;
+        state.revealed = state.savedSnapshot.revealed;
+    }
+
+    state.redoMode = false;
+    state.redoQuestionIds = [];
+    state.savedSnapshot = null;
+    state.currentIndex = 0;
+    state.filter = 'all';
+
+    dom.filters.querySelectorAll('button').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.filter === 'all');
+    });
+    if (dom.searchInput) dom.searchInput.disabled = false;
+
+    hideRedoBanner();
+    renderGrid();
+    renderQuestion();
+    updateStats();
+    saveState();
+}
+
+function showRedoBanner(count) {
+    var existing = document.getElementById('redo-banner');
+    if (existing) existing.remove();
+
+    var banner = document.createElement('div');
+    banner.id = 'redo-banner';
+    banner.className = 'redo-banner';
+    banner.innerHTML = '<span class="redo-banner-text">重做模式 — 共 ' + count + ' 道错题</span>' +
+        '<button class="redo-banner-exit" id="redo-exit-btn">退出重做</button>';
+
+    var main = document.getElementById('main-content');
+    main.insertBefore(banner, main.firstChild);
+
+    document.getElementById('redo-exit-btn').addEventListener('click', function() {
+        exitRedoMode(true);
+    });
+}
+
+function hideRedoBanner() {
+    var banner = document.getElementById('redo-banner');
+    if (banner) banner.remove();
+}
+
+function updateRedoBanner() {
+    if (!state.redoMode) return;
+    var banner = document.getElementById('redo-banner');
+    if (!banner) return;
+    var textEl = banner.querySelector('.redo-banner-text');
+    if (!textEl) return;
+
+    var revealed = 0;
+    state.redoQuestionIds.forEach(function(id) {
+        if (state.revealed.indexOf(id) !== -1) revealed++;
+    });
+    textEl.textContent = '重做模式 — 已答 ' + revealed + ' / ' + state.redoQuestionIds.length + ' 道错题';
+}
+
+function showRedoResults() {
+    var correct = 0, incorrect = 0, unanswered = 0;
+    var stillWrongIds = [];
+
+    state.redoQuestionIds.forEach(function(id) {
+        var q = null;
+        for (var i = 0; i < quizData.length; i++) {
+            if (quizData[i].id === id) { q = quizData[i]; break; }
+        }
+        if (!q) return;
+        if (state.revealed.indexOf(id) === -1) {
+            unanswered++;
+        } else if (checkCorrect(q)) {
+            correct++;
+        } else {
+            incorrect++;
+            stillWrongIds.push(id);
+        }
+    });
+
+    var total = state.redoQuestionIds.length;
+    var pct = total > 0 ? Math.round(correct / total * 100) : 0;
+
+    var html = '<div class="result-score">' + pct + '%</div>' +
+        '<div class="result-detail">' +
+        '<div class="result-item"><div class="label">重做题目</div><div class="value">' + total + '</div></div>' +
+        '<div class="result-item correct-item"><div class="label">已掌握</div><div class="value">' + correct + '</div></div>' +
+        '<div class="result-item incorrect-item"><div class="label">仍错误</div><div class="value">' + incorrect + '</div></div>' +
+        (unanswered > 0 ? '<div class="result-item"><div class="label">未答完</div><div class="value">' + unanswered + '</div></div>' : '') +
+        '</div>';
+
+    if (stillWrongIds.length > 0) {
+        html += '<div class="redo-still-wrong"><div class="label">仍需练习的题目：第 ' + stillWrongIds.join('、') + ' 题</div></div>';
+    }
+
+    dom.summary.innerHTML = html;
+    dom.modalTitle.textContent = '重做结果';
+    dom.review.textContent = '查看重做详情';
+    dom.restart.textContent = '结束重做';
+
+    dom.modal.classList.remove('hidden');
+    var firstBtn = dom.modal.querySelector('.modal-actions button');
+    if (firstBtn) firstBtn.focus();
+}
+
 function setFilter(f) {
+    if (f === 'wrong') {
+        enterRedoMode();
+        return;
+    }
+    if (state.redoMode) {
+        exitRedoMode(true);
+    }
     state.filter = f;
     state.currentIndex = 0;
     dom.filters.querySelectorAll('button').forEach(function(btn) {
@@ -2161,17 +2377,24 @@ function setFilter(f) {
 
 function viewStats() {
     var s = getStats();
-    var scorableTotal = quizData.filter(function(q) { return isScorable(q); }).length;
+    var pool = state.redoMode
+        ? quizData.filter(function(q) { return state.redoQuestionIds.indexOf(q.id) !== -1; })
+        : quizData;
+    var scorableTotal = pool.filter(function(q) { return isScorable(q); }).length;
     var pct = scorableTotal > 0 ? Math.round(s.correct / scorableTotal * 100) : 0;
+    var title = state.redoMode ? '重做统计' : '测验结果';
 
     dom.summary.innerHTML =
         '<div class="result-score">' + pct + '%</div>' +
         '<div class="result-detail">' +
-        '<div class="result-item"><div class="label">已答题目</div><div class="value">' + s.answered + ' / ' + quizData.length + '</div></div>' +
+        '<div class="result-item"><div class="label">已答题目</div><div class="value">' + s.answered + ' / ' + s.total + '</div></div>' +
         '<div class="result-item correct-item"><div class="label">回答正确</div><div class="value">' + s.correct + '</div></div>' +
         '<div class="result-item incorrect-item"><div class="label">回答错误</div><div class="value">' + s.incorrect + '</div></div>' +
         '<div class="result-item"><div class="label">已看非判分题</div><div class="value">' + s.viewed + '</div></div>' +
         '</div>';
+    dom.modalTitle.textContent = title;
+    dom.review.textContent = state.redoMode ? '继续重做' : '查看答题情况';
+    dom.restart.textContent = state.redoMode ? '结束重做' : '重新开始';
     dom.modal.classList.remove('hidden');
     // Focus trap for modal
     dom.modal._focusTrapActive = true;
@@ -2188,6 +2411,11 @@ function closeModal() {
 }
 
 function restart() {
+    if (state.redoMode) {
+        closeModal();
+        exitRedoMode(true);
+        return;
+    }
     state.answers = {};
     state.revealed = [];
     state.currentIndex = 0;
@@ -2223,7 +2451,7 @@ function applyTheme() {
 }
 
 // ===== Persistence =====
-var STORAGE_VERSION = 2;
+var STORAGE_VERSION = 3;
 
 function saveState() {
     try {
@@ -2233,7 +2461,10 @@ function saveState() {
             answers: state.answers,
             revealed: state.revealed,
             filter: state.filter,
-            theme: state.theme
+            theme: state.theme,
+            redoMode: state.redoMode,
+            redoQuestionIds: state.redoQuestionIds,
+            savedSnapshot: state.savedSnapshot
         }));
     } catch (e) { console.warn('saveState:', e.message); }
 }
@@ -2249,6 +2480,9 @@ function loadState() {
         state.revealed = d.revealed || [];
         state.filter = d.filter || 'all';
         state.theme = d.theme || 'light';
+        state.redoMode = d.redoMode || false;
+        state.redoQuestionIds = d.redoQuestionIds || [];
+        state.savedSnapshot = d.savedSnapshot || null;
     } catch (e) { console.warn('loadState:', e.message); }
 }
 
@@ -2281,7 +2515,14 @@ function bindEvents() {
 
     dom.submitBtn.addEventListener('click', viewStats);
     dom.review.addEventListener('click', closeModal);
-    dom.restart.addEventListener('click', restart);
+    dom.restart.addEventListener('click', function() {
+        if (state.redoMode) {
+            closeModal();
+            exitRedoMode(true);
+        } else {
+            restart();
+        }
+    });
     dom.modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
 
     // Keyboard shortcuts
@@ -2407,8 +2648,21 @@ function init() {
 
     applyTheme();
 
+    // Restore redo mode UI after page refresh
+    if (state.redoMode && state.redoQuestionIds.length > 0) {
+        showRedoBanner(state.redoQuestionIds.length);
+        if (dom.searchInput) {
+            dom.searchInput.disabled = true;
+            dom.searchInput.value = '';
+        }
+    }
+
     dom.filters.querySelectorAll('button').forEach(function(btn) {
-        btn.classList.toggle('active', btn.dataset.filter === state.filter);
+        if (state.redoMode) {
+            btn.classList.toggle('active', btn.dataset.filter === 'wrong');
+        } else {
+            btn.classList.toggle('active', btn.dataset.filter === state.filter);
+        }
     });
 
     renderGrid();
