@@ -3,13 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#fafafa">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta property="og:title" content="Java 编程语言题库 - 在线刷题">
+    <meta property="og:description" content="共 194 道 Java 基础题，支持在线练习、答案解析、进度追踪。">
+    <meta property="og:type" content="website">
+    <meta name="description" content="Java 编程语言在线刷题，194 道选择题、判断题、填空题、简答题，含答案解析。">
     <title>Java 编程语言题库 - 在线刷题</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <noscript>
+        <div style="text-align:center;padding:60px 20px;font-family:sans-serif;color:#333">
+            <h2>需要启用 JavaScript</h2>
+            <p>本题库网站需要 JavaScript 支持才能正常运行，请在浏览器设置中启用后刷新页面。</p>
+        </div>
+    </noscript>
     <header id="app-header">
         <div class="header-left">
             <h1>Java 编程语言题库</h1>
@@ -20,9 +34,15 @@
             <span class="stat-item stat-correct">正确 <strong id="stat-correct">0</strong></span>
             <span class="stat-item stat-incorrect">错误 <strong id="stat-incorrect">0</strong></span>
         </div>
-        <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板">
-            <span class="hamburger-icon"></span>
-        </button>
+        <div class="header-actions">
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板">
+                <span class="hamburger-icon"></span>
+            </button>
+            <button id="theme-toggle" class="theme-toggle" aria-label="切换暗色模式">
+                <span class="theme-icon-light"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                <span class="theme-icon-dark hidden"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+            </button>
+        </div>
     </header>
 
     <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden></div>
@@ -41,14 +61,27 @@
                     <div class="stat-label">错误</div>
                 </div>
             </div>
-            <div class="filter-tabs" id="filter-tabs">
-                <button data-filter="all" class="active">全部</button>
-                <button data-filter="single">单选</button>
-                <button data-filter="multiple">多选</button>
-                <button data-filter="tf">判断</button>
-                <button data-filter="fill">填空</button>
-                <button data-filter="short">简答</button>
-                <button data-filter="analysis">分析</button>
+            <div class="progress-bar-wrap" id="progress-bar-wrap">
+                <div class="progress-bar-label">
+                    <span>完成进度</span>
+                    <span id="progress-pct">0%</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+            </div>
+            <div class="filter-tabs" id="filter-tabs" role="tablist" aria-label="题目类型筛选">
+                <button data-filter="all" class="active" role="tab" aria-selected="true">全部</button>
+                <button data-filter="single" role="tab" aria-selected="false">单选</button>
+                <button data-filter="multiple" role="tab" aria-selected="false">多选</button>
+                <button data-filter="tf" role="tab" aria-selected="false">判断</button>
+                <button data-filter="fill" role="tab" aria-selected="false">填空</button>
+                <button data-filter="short" role="tab" aria-selected="false">简答</button>
+                <button data-filter="analysis" role="tab" aria-selected="false">分析</button>
+                <button data-filter="wrong" role="tab" aria-selected="false">错题</button>
+            </div>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="搜索题目关键词..." aria-label="搜索题目">
             </div>
             <div id="question-grid"></div>
             <div class="sidebar-legend">
@@ -69,7 +102,7 @@
                 <div class="question-options" id="question-options"></div>
                 <div class="answer-section" id="answer-section">
                     <button id="show-answer-btn" class="btn-show-answer">显示答案与解析</button>
-                    <div id="answer-content" class="answer-content hidden">
+                    <div id="answer-content" class="answer-content hidden" aria-live="polite">
                         <div class="correct-answer">
                             <span class="answer-label">正确答案</span>
                             <div class="answer-value" id="correct-answer-text"></div>
@@ -91,10 +124,10 @@
         </main>
     </div>
 
-    <div id="result-modal" class="modal hidden">
+    <div id="result-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="modal-overlay"></div>
         <div class="modal-content">
-            <h2>测验结果</h2>
+            <h2 id="modal-title">测验结果</h2>
             <div id="result-summary"></div>
             <div class="modal-actions">
                 <button id="review-btn" class="btn-nav">查看答题情况</button>
