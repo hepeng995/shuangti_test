@@ -1956,6 +1956,18 @@ function updateGridActive() {
     });
 }
 
+function updateSearchCount() {
+    var searchCountEl = document.getElementById('search-count');
+    if (!searchCountEl) return;
+    if (state.searchQuery) {
+        var count = getFiltered().length;
+        searchCountEl.textContent = count;
+        searchCountEl.classList.remove('hidden');
+    } else {
+        searchCountEl.classList.add('hidden');
+    }
+}
+
 function updateGridButton(q) {
     var btn = dom.grid.querySelector('.grid-btn[data-id="' + q.id + '"]');
     if (!btn) return;
@@ -1984,19 +1996,49 @@ function updateGridButton(q) {
 
 // ===== Render Question =====
 function renderQuestion() {
-    // Trigger fade-in animation on card transition
+    // Direction-aware fade-in animation
     var card = document.getElementById('question-card');
     if (card) {
         card.classList.remove('fade-in');
+        card.classList.remove('fade-in-forward');
+        card.classList.remove('fade-in-backward');
         void card.offsetWidth; // force reflow
-        card.classList.add('fade-in');
+        card.classList.add(state.navDirection === 'forward' ? 'fade-in-forward' : 'fade-in-backward');
     }
 
     var filtered = getFiltered();
     if (filtered.length === 0) {
-        dom.text.innerHTML = '<div class="loading-screen"><p>' +
-            (state.searchQuery ? '未找到包含"' + esc(state.searchQuery) + '"的题目，请尝试其他关键词' : '该分类下暂无题目') +
-            '</p></div>';
+        dom.text.innerHTML = '<div class="empty-state">' +
+            '<div class="empty-state-icon">' + (state.searchQuery ? '🔍' : '📋') + '</div>' +
+            '<div class="empty-state-text">' +
+                (state.searchQuery ? '未找到包含"' + esc(state.searchQuery) + '"的题目' : '该分类下暂无题目') +
+            '</div>' +
+            '<div class="empty-state-hint">' + (state.searchQuery ? '换个关键词试试，或清除搜索' : '试试切换其他分类') +
+            '</div>' +
+            '</div>';
+        dom.options.innerHTML = '';
+        dom.showBtn.classList.add('hidden');
+        dom.ansContent.classList.add('hidden');
+        dom.prev.disabled = true;
+        dom.next.disabled = true;
+        dom.progress.textContent = '0 / 0';
+        return;
+    }
+
+    var filtered = getFiltered();
+    if (filtered.length === 0) {
+        var emptyIcon = state.searchQuery ? '🔍' : '📋';
+        var emptyMsg = state.searchQuery
+            ? '未找到包含"' + esc(state.searchQuery) + '"的题目'
+            : '该分类下暂无题目';
+        var emptyHint = state.searchQuery
+            ? '换个关键词试试， 或清除搜索'
+            : '试试切换其他分类';
+        dom.text.innerHTML = '<div class="empty-state">' +
+            '<div class="empty-state-icon">' + emptyIcon + '</div>' +
+            '<div class="empty-state-text">' + emptyMsg + '</div>' +
+            '<div class="empty-state-hint">' + emptyHint + '</div>' +
+            '</div>';
         dom.options.innerHTML = '';
         dom.showBtn.classList.add('hidden');
         dom.ansContent.classList.add('hidden');
@@ -2017,6 +2059,10 @@ function renderQuestion() {
     // Header
     dom.badge.textContent = TYPE_LABELS[q.type] || '未知';
     dom.badge.className = 'question-badge ' + (BADGE_CLASS[q.type] || '');
+    // Apply type class to card for colored left border
+    var typeClass = BADGE_CLASS[q.type] || '';
+    card.className = card.className.replace(/type-\w+/g, '').trim();
+    if (typeClass) card.classList.add(typeClass);
     dom.number.textContent = '第 ' + q.id + ' 题';
 
     // Question text
@@ -2083,6 +2129,26 @@ function renderQuestion() {
     }
 
     updateGridActive();
+
+    // Update mobile nav progress line
+    var navBar = document.querySelector('.navigation-bar');
+    if (navBar) {
+        var navPct = filtered.length > 0 ? ((state.currentIndex + 1) / filtered.length * 100) : 0;
+        navBar.style.setProperty('--nav-progress-pct', navPct + '%');
+    }
+
+    // Update search count
+    var searchCountEl = document.getElementById('search-count');
+    if (searchCountEl) {
+        if (state.searchQuery) {
+            var count = filtered.length;
+            searchCountEl.textContent = count;
+            searchCountEl.classList.remove('hidden');
+        } else {
+            searchCountEl.classList.add('hidden');
+        }
+    }
+
     saveState();
 }
 
@@ -2182,7 +2248,12 @@ function updateStats() {
     if (dom.sidebarCorrect) dom.sidebarCorrect.textContent = s.correct;
     if (dom.sidebarIncorrect) dom.sidebarIncorrect.textContent = s.incorrect;
     var pct = s.total > 0 ? Math.round(s.answered / s.total * 100) : 0;
-    if (dom.progressFill) dom.progressFill.style.width = pct + '%';
+    if (dom.progressFill) {
+        dom.progressFill.style.width = pct + '%';
+        dom.progressFill.classList.remove('pulse');
+        void dom.progressFill.offsetWidth;
+        dom.progressFill.classList.add('pulse');
+    }
     if (dom.progressPct) dom.progressPct.textContent = pct + '%';
 }
 
@@ -2266,8 +2337,8 @@ function goTo(idx) {
     renderQuestion();
 }
 
-function goPrev() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } goTo(state.currentIndex - 1); }
-function goNext() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } goTo(state.currentIndex + 1); }
+function goPrev() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } state.navDirection = 'backward'; goTo(state.currentIndex - 1); }
+function goNext() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } state.navDirection = 'forward'; goTo(state.currentIndex + 1); }
 
 // ===== Redo Mode =====
 function enterRedoMode() {
@@ -2583,13 +2654,65 @@ function importProgress(file) {
 
 // ===== Theme =====
 function toggleTheme() {
-    if (dom.themeToggle) dom.themeToggle.classList.add('switching');
-    state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    applyTheme();
-    saveState();
-    setTimeout(function() {
-        if (dom.themeToggle) dom.themeToggle.classList.remove('switching');
-    }, 300);
+    var toggle = dom.themeToggle;
+    if (!toggle) return;
+
+    var newTheme = state.theme === 'dark' ? 'light' : 'dark';
+    var rect = toggle.getBoundingClientRect();
+    var x = rect.left + rect.width / 2;
+    var y = rect.top + rect.height / 2;
+    var endRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y)
+    );
+
+    // === Try View Transitions API first ===
+    if (document.startViewTransition) {
+        var transition = document.startViewTransition(function() {
+            state.theme = newTheme;
+            applyTheme();
+            saveState();
+        });
+
+        transition.ready.then(function() {
+            // Animate the new snapshot expanding as a circle from the toggle button
+            document.documentElement.animate({
+                clipPath: [
+                    'circle(0px at ' + x + 'px ' + y + 'px)',
+                    'circle(' + endRadius + 'px at ' + x + 'px ' + y + 'px)'
+                ]
+            }, {
+                duration: 450,
+                easing: 'ease-in-out',
+                pseudoElement: '::view-transition-new(root)'
+            });
+        });
+    } else {
+        // === Fallback: circle clip-path via inline overlay ===
+        var targetColor = newTheme === 'dark' ? '#0f172a' : '#f8fafc';
+        var overlay = document.createElement('div');
+        overlay.style.cssText =
+            'position:fixed;inset:0;z-index:9999;pointer-events:none;' +
+            'background:' + targetColor + ';' +
+            'clip-path:circle(0px at ' + x + 'px ' + y + 'px);' +
+            'transition:clip-path 0.45s ease-in-out;';
+        document.body.appendChild(overlay);
+
+        // Expand circle from button position
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                overlay.style.clipPath = 'circle(' + endRadius + 'px at ' + x + 'px ' + y + 'px)';
+            });
+        });
+
+        // Apply theme behind the expanding circle, then remove overlay
+        setTimeout(function() {
+            state.theme = newTheme;
+            applyTheme();
+            saveState();
+            setTimeout(function() { overlay.remove(); }, 100);
+        }, 430);
+    }
 }
 
 function applyTheme() {
@@ -2752,6 +2875,16 @@ function bindEvents() {
             }
         }
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === '?') {
+            toggleShortcutModal();
+            e.preventDefault();
+            return;
+        }
+        if (e.key === 'b' || e.key === 'B') {
+            toggleBookmark();
+            e.preventDefault();
+            return;
+        }
         if (e.key === 'ArrowLeft') { goPrev(); e.preventDefault(); }
         else if (e.key === 'ArrowRight') { goNext(); e.preventDefault(); }
         else if (e.key === 'Enter' || e.key === ' ') {
@@ -2810,6 +2943,7 @@ function bindEvents() {
                 state.currentIndex = 0;
                 renderGrid();
                 renderQuestion();
+                updateSearchCount();
                 searchTimer = null;
             }, 200);
         });
@@ -2887,6 +3021,17 @@ function bindEvents() {
             renderQuestion();
             saveState();
         });
+    }
+}
+
+// ===== Shortcut Modal =====
+function toggleShortcutModal() {
+    var modal = document.getElementById('shortcut-modal');
+    if (!modal) return;
+    if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+    } else {
+        modal.classList.add('hidden');
     }
 }
 

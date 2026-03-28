@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#fafafa">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta property="og:title" content="Java 编程语言题库 - 在线刷题">
@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <a href="#main-content" class="skip-link">跳转到主要内容</a>
     <noscript>
         <div style="text-align:center;padding:60px 20px;font-family:sans-serif;color:#333">
             <h2>需要启用 JavaScript</h2>
@@ -44,10 +45,10 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </button>
             <input type="file" id="import-file" accept=".json" style="display:none">
-            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板">
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="切换题号面板" title="切换题号面板">
                 <span class="hamburger-icon"></span>
             </button>
-            <button id="theme-toggle" class="theme-toggle" aria-label="切换暗色模式">
+            <button id="theme-toggle" class="theme-toggle" aria-label="切换暗色模式" title="切换暗色模式">
                 <span class="theme-icon-light"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
                 <span class="theme-icon-dark hidden"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
             </button>
@@ -73,7 +74,7 @@
             <div class="progress-bar-wrap" id="progress-bar-wrap">
                 <div class="progress-bar-label">
                     <span>完成进度</span>
-                    <span id="progress-pct">0%</span>
+                    <span id="progress-pct" role="status">0%</span>
                 </div>
                 <div class="progress-bar-track">
                     <div class="progress-bar-fill" id="progress-fill"></div>
@@ -93,6 +94,7 @@
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="搜索题目关键词..." aria-label="搜索题目">
                 <button id="search-clear" class="search-clear hidden" aria-label="清除搜索">&times;</button>
+                <span class="search-count hidden" id="search-count" aria-live="polite"></span>
             </div>
             <label class="shuffle-toggle">
                 <input type="checkbox" id="shuffle-toggle">
@@ -164,6 +166,24 @@
                 <button id="confirm-cancel" class="btn-nav">取消</button>
                 <button id="confirm-ok" class="btn-submit">确认</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcut-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcut-title">
+        <div class="modal-overlay"></div>
+        <div class="modal-content shortcut-content">
+            <h2 id="shortcut-title">键盘快捷键</h2>
+            <div class="shortcut-grid">
+                <div class="shortcut-item"><kbd>←</kbd> <kbd>→</kbd><span>上/下一题</span></div>
+                <div class="shortcut-item"><kbd>1</kbd>–<kbd>9</kbd><span>选择选项</span></div>
+                <div class="shortcut-item"><kbd>A</kbd>–<kbd>E</kbd><span>选择选项</span></div>
+                <div class="shortcut-item"><kbd>Enter</kbd> / <kbd>Space</kbd><span>提交答案</span></div>
+                <div class="shortcut-item"><kbd>B</kbd><span>收藏/取消</span></div>
+                <div class="shortcut-item"><kbd>?</kbd><span>显示快捷键</span></div>
+                <div class="shortcut-item"><kbd>Esc</kbd><span>关闭弹窗</span></div>
+            </div>
+            <div class="modal-actions"><button class="btn-submit shortcut-close-btn">知道了</button></div>
         </div>
     </div>
 
