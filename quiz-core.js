@@ -33,6 +33,7 @@ var _docKeyHandler = null;
 var _docTouchStartHandler = null;
 var _docTouchEndHandler = null;
 var _searchTimer = null;
+var _elementHandlers = [];
 
 // Sidebar toggle/backdrop handlers (named for safe re-binding)
 var _sidebarToggleHandler = function() {
@@ -588,8 +589,13 @@ function updateStats() {
     if (dom.progressFill) {
         dom.progressFill.style.width = pct + '%';
         dom.progressFill.classList.remove('pulse');
+        dom.progressFill.classList.add('animate');
         void dom.progressFill.offsetWidth;
         dom.progressFill.classList.add('pulse');
+        clearTimeout(dom.progressFill._shimmerTimer);
+        dom.progressFill._shimmerTimer = setTimeout(function() {
+            if (dom.progressFill) dom.progressFill.classList.remove('animate');
+        }, 2000);
     }
     if (dom.progressPct) dom.progressPct.textContent = pct + '%';
 }
@@ -1161,50 +1167,60 @@ function saveState() {
 }
 
 // ===== Events =====
+function _toggleBookmark() {
+    var filtered = getFiltered();
+    if (!filtered.length) return;
+    var q = filtered[state.currentIndex];
+    if (!q) return;
+    var wasBookmarked = state.bookmarked.has(q.id);
+    if (wasBookmarked) state.bookmarked.delete(q.id);
+    else state.bookmarked.add(q.id);
+    invalidateFilterCache();
+    dom.bookmarkBtn.classList.toggle('active', !wasBookmarked);
+    updateGridButton(q);
+    saveState();
+}
+
 function bindEvents() {
     if (_eventsBound) return;
     _eventsBound = true;
-    dom.options.addEventListener('click', function(e) {
+    var _optionsClickHandler = function(e) {
         var el = e.target.closest('[data-label]');
         if (el) selectOption(el.dataset.label);
-    });
+    };
+    _elementHandlers.push([dom.options, 'click', _optionsClickHandler]);
+    dom.options.addEventListener('click', _optionsClickHandler);
     // Keyboard support for option cards (Enter/Space)
-    dom.options.addEventListener('keydown', function(e) {
+    var _optionsKeyHandler = function(e) {
         if (e.key === 'Enter' || e.key === ' ') {
             var el = e.target.closest('[data-label]');
             if (el) { selectOption(el.dataset.label); e.preventDefault(); }
         }
-    });
+    };
+    _elementHandlers.push([dom.options, 'keydown', _optionsKeyHandler]);
+    dom.options.addEventListener('keydown', _optionsKeyHandler);
 
+    _elementHandlers.push([dom.showBtn, 'click', revealAnswer]);
     dom.showBtn.addEventListener('click', revealAnswer);
 
-    function toggleBookmark() {
-        var filtered = getFiltered();
-        if (!filtered.length) return;
-        var q = filtered[state.currentIndex];
-        if (!q) return;
-        var wasBookmarked = state.bookmarked.has(q.id);
-        if (wasBookmarked) state.bookmarked.delete(q.id);
-        else state.bookmarked.add(q.id);
-        invalidateFilterCache();
-        dom.bookmarkBtn.classList.toggle('active', !wasBookmarked);
-        updateGridButton(q);
-        saveState();
-    }
-
     if (dom.bookmarkBtn) {
-        dom.bookmarkBtn.addEventListener('click', toggleBookmark);
+        _elementHandlers.push([dom.bookmarkBtn, 'click', _toggleBookmark]);
+        dom.bookmarkBtn.addEventListener('click', _toggleBookmark);
     }
 
+    _elementHandlers.push([dom.prev, 'click', goPrev]);
     dom.prev.addEventListener('click', goPrev);
+    _elementHandlers.push([dom.next, 'click', goNext]);
     dom.next.addEventListener('click', goNext);
 
-    dom.filters.addEventListener('click', function(e) {
+    var _filtersClickHandler = function(e) {
         var btn = e.target.closest('button[data-filter]');
         if (btn) setFilter(btn.dataset.filter);
-    });
+    };
+    _elementHandlers.push([dom.filters, 'click', _filtersClickHandler]);
+    dom.filters.addEventListener('click', _filtersClickHandler);
 
-    dom.grid.addEventListener('click', function(e) {
+    var _gridClickHandler = function(e) {
         var btn = e.target.closest('.grid-btn');
         if (!btn) return;
         var id = parseInt(btn.dataset.id);
@@ -1219,39 +1235,54 @@ function bindEvents() {
                 dom.sidebarBackdrop.setAttribute('aria-hidden', 'true');
             }
         }
-    });
+    };
+    _elementHandlers.push([dom.grid, 'click', _gridClickHandler]);
+    dom.grid.addEventListener('click', _gridClickHandler);
 
+    _elementHandlers.push([dom.submitBtn, 'click', viewStats]);
     dom.submitBtn.addEventListener('click', viewStats);
+    _elementHandlers.push([dom.review, 'click', closeModal]);
     dom.review.addEventListener('click', closeModal);
-    dom.restart.addEventListener('click', function() {
+    var _restartClickHandler = function() {
         if (state.redoMode) {
             closeModal();
             exitRedoMode(true);
         } else {
             restart();
         }
-    });
-    dom.modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+    };
+    _elementHandlers.push([dom.restart, 'click', _restartClickHandler]);
+    dom.restart.addEventListener('click', _restartClickHandler);
+    var _modalOverlay = dom.modal.querySelector('.modal-overlay');
+    _elementHandlers.push([_modalOverlay, 'click', closeModal]);
+    _modalOverlay.addEventListener('click', closeModal);
 
     // Confirm modal events
-    dom.confirmCancel.addEventListener('click', function() {
+    var _confirmCancelHandler = function() {
         dom.confirmModal.classList.add('hidden');
         _confirmCallback = null;
         unlockScroll();
         setBgAriaHidden(false);
-    });
-    dom.confirmOk.addEventListener('click', function() {
+    };
+    _elementHandlers.push([dom.confirmCancel, 'click', _confirmCancelHandler]);
+    dom.confirmCancel.addEventListener('click', _confirmCancelHandler);
+    var _confirmOkHandler = function() {
         dom.confirmModal.classList.add('hidden');
         unlockScroll();
         setBgAriaHidden(false);
         if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
-    });
-    dom.confirmModal.querySelector('.modal-overlay').addEventListener('click', function() {
+    };
+    _elementHandlers.push([dom.confirmOk, 'click', _confirmOkHandler]);
+    dom.confirmOk.addEventListener('click', _confirmOkHandler);
+    var _confirmOverlayHandler = function() {
         dom.confirmModal.classList.add('hidden');
         _confirmCallback = null;
         unlockScroll();
         setBgAriaHidden(false);
-    });
+    };
+    var _confirmModalOverlay = dom.confirmModal.querySelector('.modal-overlay');
+    _elementHandlers.push([_confirmModalOverlay, 'click', _confirmOverlayHandler]);
+    _confirmModalOverlay.addEventListener('click', _confirmOverlayHandler);
 
     // Keyboard shortcuts
     _docKeyHandler = function(e) {
@@ -1286,7 +1317,7 @@ function bindEvents() {
             return;
         }
         if (e.key === 'b' || e.key === 'B') {
-            toggleBookmark();
+            _toggleBookmark();
             e.preventDefault();
             return;
         }
@@ -1335,7 +1366,7 @@ function bindEvents() {
 
     // Search with debounce
     if (dom.searchInput) {
-        dom.searchInput.addEventListener('input', function() {
+        var _searchInputHandler = function() {
             var val = this.value.trim();
             if (dom.searchClear) dom.searchClear.classList.toggle('hidden', !val);
             if (_searchTimer) clearTimeout(_searchTimer);
@@ -1348,12 +1379,14 @@ function bindEvents() {
                 updateSearchCount();
                 _searchTimer = null;
             }, 200);
-        });
+        };
+        _elementHandlers.push([dom.searchInput, 'input', _searchInputHandler]);
+        dom.searchInput.addEventListener('input', _searchInputHandler);
     }
 
     // Search clear button
     if (dom.searchClear) {
-        dom.searchClear.addEventListener('click', function() {
+        var _searchClearHandler = function() {
             if (dom.searchInput) { dom.searchInput.value = ''; dom.searchInput.focus(); }
             dom.searchClear.classList.add('hidden');
             state.searchQuery = '';
@@ -1361,7 +1394,9 @@ function bindEvents() {
             invalidateFilterCache();
             renderGrid();
             renderQuestion();
-        });
+        };
+        _elementHandlers.push([dom.searchClear, 'click', _searchClearHandler]);
+        dom.searchClear.addEventListener('click', _searchClearHandler);
     }
 
     // Touch swipe for sidebar
@@ -1390,16 +1425,21 @@ function bindEvents() {
 
     // Export / Import
     if (dom.exportBtn) {
+        _elementHandlers.push([dom.exportBtn, 'click', exportProgress]);
         dom.exportBtn.addEventListener('click', exportProgress);
     }
     if (dom.importBtn && dom.importFile) {
-        dom.importBtn.addEventListener('click', function() { dom.importFile.click(); });
-        dom.importFile.addEventListener('change', function() {
+        var _importBtnHandler = function() { dom.importFile.click(); };
+        _elementHandlers.push([dom.importBtn, 'click', _importBtnHandler]);
+        dom.importBtn.addEventListener('click', _importBtnHandler);
+        var _importFileHandler = function() {
             if (this.files && this.files[0]) {
                 importProgress(this.files[0]);
                 this.value = '';
             }
-        });
+        };
+        _elementHandlers.push([dom.importFile, 'change', _importFileHandler]);
+        dom.importFile.addEventListener('change', _importFileHandler);
     }
 }
 
@@ -1536,11 +1576,24 @@ function destroyQuizPage() {
     // Invalidate cached data
     invalidateFilterCache();
 
+    // Remove all element-bound event listeners
+    _elementHandlers.forEach(function(item) {
+        if (item[0]) item[0].removeEventListener(item[1], item[2]);
+    });
+    _elementHandlers = [];
+
+    // Clean up pending timers
+    if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; }
+    if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+    if (_confirmCallback) _confirmCallback = null;
+
     // Reset
     currentBankId = null;
     _stateLoaded = false;
     _eventsBound = false;
     quizData = [];
+    // Release DOM references
+    Object.keys(dom).forEach(function(k) { dom[k] = null; });
 }
 
 // ===== Expose globally =====
