@@ -1,8 +1,9 @@
-var CACHE_NAME = 'quiz-platform-v4';
+var CACHE_NAME = 'quiz-platform-v5';
 var CACHE_FILES = [
   './',
   './index.html',
   './style.css',
+  './manifest.json',
   './db.js',
   './router.js',
   './quiz-core.js',
@@ -56,11 +57,20 @@ self.addEventListener('fetch', function(event) {
   event.respondWith(
     caches.match(event.request).then(function(cached) {
       if (cached) return cached;
-      return fetch(event.request).catch(function() {
+      return fetch(event.request).then(function(response) {
+        // Only cache successful responses from same origin
+        if (response.ok) {
+          var clone = response.clone();
+          caches.open(CACHE_NAME).then(function(cache) { cache.put(event.request, clone); });
+        }
+        return response;
+      }).catch(function() {
         // Serve cached index.html for navigation requests when offline
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
+        // Return a proper error response for non-navigation requests
+        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
       });
     })
   );
