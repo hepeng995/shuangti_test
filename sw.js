@@ -12,6 +12,7 @@ var CACHE_FILES = [
 ];
 
 self.addEventListener('install', function(event) {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
       return cache.addAll(CACHE_FILES);
@@ -26,6 +27,8 @@ self.addEventListener('activate', function(event) {
         names.filter(function(n) { return n !== CACHE_NAME; })
              .map(function(n) { return caches.delete(n); })
       );
+    }).then(function() {
+      return self.clients.claim();
     })
   );
 });
@@ -49,10 +52,16 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // Cache-first for local assets
+  // Cache-first for local assets, with offline fallback for navigation
   event.respondWith(
     caches.match(event.request).then(function(cached) {
-      return cached || fetch(event.request);
+      if (cached) return cached;
+      return fetch(event.request).catch(function() {
+        // Serve cached index.html for navigation requests when offline
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      });
     })
   );
 });

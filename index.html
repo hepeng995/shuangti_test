@@ -351,8 +351,9 @@
             Router.navigate('/');
         });
 
-        // Apply global theme on load
-        var savedTheme = localStorage.getItem('quiz_theme') || 'light';
+        // Apply global theme on load (respect system preference)
+        var savedTheme = localStorage.getItem('quiz_theme') ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', savedTheme);
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.content = savedTheme === 'dark' ? '#0f172a' : '#f8fafc';
@@ -399,7 +400,7 @@
 
         // Register Service Worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(function() {});
+            navigator.serviceWorker.register('sw.js').catch(function(e) { console.warn('SW registration failed:', e); });
         }
     })();
 

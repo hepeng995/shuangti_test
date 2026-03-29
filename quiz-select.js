@@ -21,11 +21,12 @@ var QuizSelect = (function() {
     var bankGroupFilter = '';
 
     // ===== Utility =====
-    function escapeHtml(str) {
+    // Use shared esc() from quiz-core.js when available, fallback to DOM-based method
+    var escapeHtml = (typeof esc === 'function') ? esc : function(str) {
         var d = document.createElement('div');
         d.textContent = str;
         return d.innerHTML;
-    }
+    };
 
     // ===== Group helpers =====
 

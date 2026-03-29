@@ -23,6 +23,23 @@ var SCORABLE = ['single', 'multiple', 'tf', 'fill'];
 var quizData = [];
 
 var autoJumpTimer = null;
+var _eventsBound = false;
+var _stateLoaded = false;
+var _confirmCallback = null;
+var _initGeneration = 0;
+
+// Document-level event handler references (for cleanup)
+var _docKeyHandler = null;
+var _docTouchStartHandler = null;
+var _docTouchEndHandler = null;
+var _searchTimer = null;
+
+// Filtered list cache
+var _filteredCache = null;
+
+// Touch swipe state
+var _touchStartX = 0, _touchStartY = 0, _touchStartTime = 0;
+
 var state = {
     currentIndex: 0,
     answers: {},
@@ -83,6 +100,11 @@ function initDom() {
     dom.confirmMsg = document.getElementById('confirm-message');
     dom.confirmOk = document.getElementById('confirm-ok');
     dom.confirmCancel = document.getElementById('confirm-cancel');
+    dom.card = document.getElementById('question-card');
+    dom.navBar = document.querySelector('.navigation-bar');
+    dom.appContainer = document.getElementById('app-container');
+    dom.appHeader = document.getElementById('app-header');
+    dom.searchCount = document.getElementById('search-count');
 }
 
 // ===== Utilities =====
@@ -96,7 +118,6 @@ function formatText(t) {
     return esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
 }
 
-var _confirmCallback = null;
 var _savedScrollY = 0;
 function lockScroll() {
     _savedScrollY = window.scrollY;
@@ -111,8 +132,8 @@ function unlockScroll() {
     window.scrollTo(0, _savedScrollY);
 }
 function setBgAriaHidden(hidden) {
-    var el = document.getElementById('app-container');
-    var hdr = document.getElementById('app-header');
+    var el = dom.appContainer;
+    var hdr = dom.appHeader;
     if (el) hidden ? el.setAttribute('aria-hidden', 'true') : el.removeAttribute('aria-hidden');
     if (hdr) hidden ? hdr.setAttribute('aria-hidden', 'true') : hdr.removeAttribute('aria-hidden');
 }
@@ -188,23 +209,29 @@ function parseQuestions(md) {
 window.parseQuestions = parseQuestions;
 window.initQuizPage = initQuizPage;
 window.destroyQuizPage = destroyQuizPage;
+window.esc = esc;
 
 // ===== Helpers =====
+function invalidateFilterCache() {
+    _filteredCache = null;
+}
+
 function getFiltered() {
+    if (_filteredCache !== null) return _filteredCache;
     var list;
     if (state.redoMode) {
         var ids = state.redoQuestionIds;
         list = quizData.filter(function(q) { return ids.has(q.id); });
-        return list;
-    }
-    list = quizData;
-    if (state.filter !== 'all') {
-        if (state.filter === 'wrong') {
-            list = list.filter(function(q) { return isRevealed(q) && isScorable(q) && !checkCorrect(q); });
-        } else if (state.filter === 'bookmarked') {
-            list = list.filter(function(q) { return state.bookmarked.has(q.id); });
-        } else {
-            list = list.filter(function(q) { return q.type === state.filter; });
+    } else {
+        list = quizData;
+        if (state.filter !== 'all') {
+            if (state.filter === 'wrong') {
+                list = list.filter(function(q) { return isRevealed(q) && isScorable(q) && !checkCorrect(q); });
+            } else if (state.filter === 'bookmarked') {
+                list = list.filter(function(q) { return state.bookmarked.has(q.id); });
+            } else {
+                list = list.filter(function(q) { return q.type === state.filter; });
+            }
         }
     }
     if (state.searchQuery) {
@@ -214,6 +241,7 @@ function getFiltered() {
                    (q.options && q.options.some(function(o) { return o.text.toLowerCase().indexOf(kw) !== -1; }));
         });
     }
+    _filteredCache = list;
     return list;
 }
 
@@ -261,18 +289,19 @@ function checkCorrect(q) {
 }
 
 // ===== Grid =====
+function isHiddenByFilter(q) {
+    if (state.redoMode) return !state.redoQuestionIds.has(q.id);
+    if (state.filter === 'wrong') return !(isRevealed(q) && isScorable(q) && !checkCorrect(q));
+    if (state.filter === 'bookmarked') return !state.bookmarked.has(q.id);
+    if (state.filter !== 'all') return q.type !== state.filter;
+    return false;
+}
+
 function renderGrid() {
     var html = '';
     quizData.forEach(function(q) {
         var cls = 'grid-btn';
-        var hide = false;
-        if (state.redoMode) {
-            hide = !state.redoQuestionIds.has(q.id);
-        } else if (state.filter === 'wrong') {
-            hide = !(isRevealed(q) && isScorable(q) && !checkCorrect(q));
-        } else if (state.filter !== 'all') {
-            hide = q.type !== state.filter;
-        }
+        var hide = isHiddenByFilter(q);
         if (hide) cls += ' hidden-by-filter';
         if (state.bookmarked.has(q.id)) cls += ' bookmarked';
         if (isRevealed(q)) {
@@ -304,7 +333,7 @@ function updateGridActive() {
 }
 
 function updateSearchCount() {
-    var searchCountEl = document.getElementById('search-count');
+    var searchCountEl = dom.searchCount;
     if (!searchCountEl) return;
     if (state.searchQuery) {
         var count = getFiltered().length;
@@ -319,14 +348,7 @@ function updateGridButton(q) {
     var btn = dom.grid.querySelector('.grid-btn[data-id="' + q.id + '"]');
     if (!btn) return;
     btn.className = 'grid-btn';
-    var hide = false;
-    if (state.redoMode) {
-        hide = !state.redoQuestionIds.has(q.id);
-    } else if (state.filter === 'wrong') {
-        hide = !(isRevealed(q) && isScorable(q) && !checkCorrect(q));
-    } else if (state.filter !== 'all') {
-        hide = q.type !== state.filter;
-    }
+    var hide = isHiddenByFilter(q);
     if (hide) btn.classList.add('hidden-by-filter');
     if (state.bookmarked.has(q.id)) btn.classList.add('bookmarked');
     if (isRevealed(q)) {
@@ -344,7 +366,7 @@ function updateGridButton(q) {
 // ===== Render Question =====
 function renderQuestion() {
     // Direction-aware fade-in animation (only on navigation, not option selection)
-    var card = document.getElementById('question-card');
+    var card = dom.card;
     if (card && state.navDirection) {
         card.classList.remove('fade-in');
         card.classList.remove('fade-in-forward');
@@ -456,23 +478,14 @@ function renderQuestion() {
     updateGridActive();
 
     // Update mobile nav progress line
-    var navBar = document.querySelector('.navigation-bar');
+    var navBar = dom.navBar;
     if (navBar) {
         var navPct = filtered.length > 0 ? ((state.currentIndex + 1) / filtered.length * 100) : 0;
         navBar.style.setProperty('--nav-progress-pct', navPct + '%');
     }
 
     // Update search count
-    var searchCountEl = document.getElementById('search-count');
-    if (searchCountEl) {
-        if (state.searchQuery) {
-            var count = filtered.length;
-            searchCountEl.textContent = count;
-            searchCountEl.classList.remove('hidden');
-        } else {
-            searchCountEl.classList.add('hidden');
-        }
-    }
+    updateSearchCount();
 
     debouncedSaveState();
 }
@@ -560,7 +573,7 @@ function buildFillInput(q, revealed, userAns) {
     }
     var val = userAns || '';
     return '<div class="fill-input-wrap">' +
-        '<input type="text" id="fill-input" class="fill-input" placeholder="请输入答案..." value="' + esc(val) + '" autocomplete="off">' +
+        '<input type="text" id="fill-input" class="fill-input" placeholder="请输入答案..." value="' + esc(val) + '" autocomplete="off" aria-label="填空答案">' +
         '</div>';
 }
 
@@ -638,13 +651,14 @@ function revealAnswer() {
     var q = filtered[state.currentIndex];
     if (!q || isRevealed(q)) return;
     state.revealed.add(q.id);
+    invalidateFilterCache(); // wrong filter depends on revealed state
     renderQuestion();
     updateGridButton(q);
     updateStats();
 
     // Feedback animation for scorable questions
     if (isScorable(q)) {
-        var card = document.getElementById('question-card');
+        var card = dom.card;
         var btn = dom.grid.querySelector('.grid-btn[data-id="' + q.id + '"]');
         var ok = checkCorrect(q);
         // Announce feedback for screen readers
@@ -696,8 +710,16 @@ function goTo(idx) {
     renderQuestion();
 }
 
-function goPrev() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } state.navDirection = 'backward'; goTo(state.currentIndex - 1); }
-function goNext() { if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; } state.navDirection = 'forward'; goTo(state.currentIndex + 1); }
+function goPrev() {
+    if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; }
+    state.navDirection = 'backward';
+    goTo(state.currentIndex - 1);
+}
+function goNext() {
+    if (autoJumpTimer) { clearTimeout(autoJumpTimer); autoJumpTimer = null; }
+    state.navDirection = 'forward';
+    goTo(state.currentIndex + 1);
+}
 
 // ===== Redo Mode =====
 function enterRedoMode() {
@@ -724,6 +746,7 @@ function enterRedoMode() {
         revealed: new Set(state.revealed)
     };
 
+    invalidateFilterCache();
     state.redoMode = true;
     state.redoQuestionIds = new Set(wrongIds);
 
@@ -782,6 +805,7 @@ function exitRedoMode(mergeResults) {
     state.savedSnapshot = null;
     state.currentIndex = 0;
     state.filter = 'all';
+    invalidateFilterCache();
 
     dom.filters.querySelectorAll('button').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.filter === 'all');
@@ -885,6 +909,7 @@ function setFilter(f) {
     if (state.redoMode) {
         exitRedoMode(true);
     }
+    invalidateFilterCache();
     state.filter = f;
     state.currentIndex = 0;
     dom.filters.querySelectorAll('button').forEach(function(btn) {
@@ -918,8 +943,6 @@ function viewStats() {
     dom.modal.classList.remove('hidden');
     lockScroll();
     setBgAriaHidden(true);
-    // Focus trap for modal
-    dom.modal._focusTrapActive = true;
     var firstBtn = dom.modal.querySelector('.modal-actions button');
     if (firstBtn) firstBtn.focus();
 }
@@ -941,8 +964,8 @@ function restart() {
         return;
     }
     showConfirm('确定要重新开始吗？所有答题进度将被清除。', function() {
+        invalidateFilterCache();
         state.answers = {};
-        state.revealed = new Set();
         state.currentIndex = 0;
         state.filter = 'all';
         dom.filters.querySelectorAll('button').forEach(function(btn) {
@@ -978,22 +1001,35 @@ function exportProgress() {
     URL.revokeObjectURL(url);
 }
 
+function validateImportData(d) {
+    if (!d || typeof d !== 'object') return false;
+    if (d.v !== undefined && d.v > STORAGE_VERSION) return false;
+    if (d.answers !== undefined && typeof d.answers !== 'object') return false;
+    if (d.revealed !== undefined && !Array.isArray(d.revealed)) return false;
+    if (d.bookmarked !== undefined && !Array.isArray(d.bookmarked)) return false;
+    if (d.currentIndex !== undefined && typeof d.currentIndex !== 'number') return false;
+    if (d.filter !== undefined && typeof d.filter !== 'string') return false;
+    if (d.theme !== undefined && d.theme !== 'light' && d.theme !== 'dark') return false;
+    return true;
+}
+
 function importProgress(file) {
     var reader = new FileReader();
     reader.onload = function(e) {
         try {
             var d = JSON.parse(e.target.result);
-            if (!d || !d.answers) {
+            if (!validateImportData(d)) {
                 showConfirm('导入失败：文件格式不正确', function() {});
                 return;
             }
             showConfirm('导入将覆盖当前进度，确定继续吗？', function() {
+                invalidateFilterCache();
                 state.answers = d.answers || {};
                 state.revealed = new Set(d.revealed || []);
                 state.filter = d.filter || 'all';
                 state.theme = d.theme || 'light';
                 state.bookmarked = new Set(d.bookmarked || []);
-                state.currentIndex = d.currentIndex || 0;
+                state.currentIndex = (typeof d.currentIndex === 'number') ? d.currentIndex : 0;
                 state.redoMode = false;
                 state.redoQuestionIds = new Set();
                 state.savedSnapshot = null;
@@ -1102,8 +1138,6 @@ function debouncedSaveState() {
 }
 
 var _storageWarned = false;
-var _stateLoaded = false;
-var _eventsBound = false;
 
 function saveState() {
     if (!currentBankId) return;
@@ -1127,11 +1161,6 @@ function saveState() {
     } catch (e) {
         console.warn('saveState:', e.message);
     }
-}
-
-function loadState() {
-    if (!currentBankId) return;
-    // loadState is now async — called from initQuizPage
 }
 
 // ===== Events =====
@@ -1172,6 +1201,7 @@ function bindEvents() {
         var wasBookmarked = state.bookmarked.has(q.id);
         if (wasBookmarked) state.bookmarked.delete(q.id);
         else state.bookmarked.add(q.id);
+        invalidateFilterCache();
         dom.bookmarkBtn.classList.toggle('active', !wasBookmarked);
         updateGridButton(q);
         saveState();
@@ -1239,7 +1269,7 @@ function bindEvents() {
     });
 
     // Keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
+    _docKeyHandler = function(e) {
         // Shortcut modal handling
         var shortcutModal = document.getElementById('shortcut-modal');
         if (shortcutModal && !shortcutModal.classList.contains('hidden')) {
@@ -1308,7 +1338,8 @@ function bindEvents() {
             }
             e.preventDefault();
         }
-    });
+    };
+    document.addEventListener('keydown', _docKeyHandler);
 
     dom.sidebarToggle.addEventListener('click', function() {
         dom.sidebar.classList.toggle('open');
@@ -1328,18 +1359,18 @@ function bindEvents() {
 
     // Search with debounce
     if (dom.searchInput) {
-        var searchTimer = null;
         dom.searchInput.addEventListener('input', function() {
             var val = this.value.trim();
             if (dom.searchClear) dom.searchClear.classList.toggle('hidden', !val);
-            if (searchTimer) clearTimeout(searchTimer);
-            searchTimer = setTimeout(function() {
+            if (_searchTimer) clearTimeout(_searchTimer);
+            _searchTimer = setTimeout(function() {
                 state.searchQuery = val;
                 state.currentIndex = 0;
+                invalidateFilterCache();
                 renderGrid();
                 renderQuestion();
                 updateSearchCount();
-                searchTimer = null;
+                _searchTimer = null;
             }, 200);
         });
     }
@@ -1351,22 +1382,22 @@ function bindEvents() {
             dom.searchClear.classList.add('hidden');
             state.searchQuery = '';
             state.currentIndex = 0;
+            invalidateFilterCache();
             renderGrid();
             renderQuestion();
         });
     }
 
     // Touch swipe for sidebar
-    var touchStartX = 0, touchStartY = 0, touchStartTime = 0;
-    document.addEventListener('touchstart', function(e) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = Date.now();
-    }, { passive: true });
-    document.addEventListener('touchend', function(e) {
-        if (Date.now() - touchStartTime > 500) return;
-        var dx = e.changedTouches[0].clientX - touchStartX;
-        var dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+    _docTouchStartHandler = function(e) {
+        _touchStartX = e.touches[0].clientX;
+        _touchStartY = e.touches[0].clientY;
+        _touchStartTime = Date.now();
+    };
+    _docTouchEndHandler = function(e) {
+        if (Date.now() - _touchStartTime > 500) return;
+        var dx = e.changedTouches[0].clientX - _touchStartX;
+        var dy = Math.abs(e.changedTouches[0].clientY - _touchStartY);
         if (dy > Math.abs(dx)) return;
         if (dx > 60 && !dom.sidebar.classList.contains('open')) {
             dom.sidebar.classList.add('open');
@@ -1375,7 +1406,9 @@ function bindEvents() {
             dom.sidebar.classList.remove('open');
             if (dom.sidebarBackdrop) dom.sidebarBackdrop.classList.remove('show');
         }
-    }, { passive: true });
+    };
+    document.addEventListener('touchstart', _docTouchStartHandler, { passive: true });
+    document.addEventListener('touchend', _docTouchEndHandler, { passive: true });
 
     // Theme Toggle — already bound in bootstrap (index.html)
 
@@ -1413,11 +1446,15 @@ function toggleShortcutModal() {
 
 // ===== Init =====
 function initQuizPage(bankId) {
+    _initGeneration++;
+    var myGeneration = _initGeneration;
+
     currentBankId = bankId;
     resetState();
     initDom();
 
     QuizDB.getBank(bankId).then(function(bank) {
+        if (myGeneration !== _initGeneration) return; // stale callback
         if (!bank || !bank.mdContent) {
             dom.text.innerHTML = '<div class="error-message"><h3>无法加载题库</h3><p>题库数据未找到</p></div>';
             return;
@@ -1441,6 +1478,7 @@ function initQuizPage(bankId) {
 
         // Load progress from IndexedDB
         QuizDB.getProgress(bankId).then(function(prog) {
+            if (myGeneration !== _initGeneration) return; // stale callback
             if (prog) {
                 state.currentIndex = prog.currentIndex || 0;
                 state.answers = prog.answers || {};
@@ -1508,9 +1546,20 @@ function destroyQuizPage() {
     if (currentBankId && _stateLoaded) {
         try { saveState(); } catch (e) { /* ignore */ }
     }
+
+    // Remove document-level event listeners to prevent duplication
+    if (_docKeyHandler) { document.removeEventListener('keydown', _docKeyHandler); _docKeyHandler = null; }
+    if (_docTouchStartHandler) { document.removeEventListener('touchstart', _docTouchStartHandler); _docTouchStartHandler = null; }
+    if (_docTouchEndHandler) { document.removeEventListener('touchend', _docTouchEndHandler); _docTouchEndHandler = null; }
+    if (_searchTimer) { clearTimeout(_searchTimer); _searchTimer = null; }
+
     // Remove redo banner if present
     var banner = document.getElementById('redo-banner');
     if (banner) banner.remove();
+
+    // Invalidate cached data
+    invalidateFilterCache();
+
     // Reset
     currentBankId = null;
     _stateLoaded = false;

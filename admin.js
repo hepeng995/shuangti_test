@@ -31,11 +31,11 @@ var AdminPanel = (function() {
     var ADMIN_SESSION_TOKEN = '3b091b1374484e2c';
 
     // ===== Utilities =====
-    function escapeHtml(str) {
+    var escapeHtml = (typeof esc === 'function') ? esc : function(str) {
         var d = document.createElement('div');
         d.textContent = str;
         return d.innerHTML;
-    }
+    };
 
     function generateId(name) {
         var base = 'custom-' + Date.now().toString(36);

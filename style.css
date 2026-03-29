@@ -193,6 +193,8 @@
     --glow-incorrect: 0 0 24px rgba(251, 113, 133, 0.2);
 
     /* Question Type Colors (dark) */
+    --type-single: var(--accent);
+    --type-single-bg: var(--accent-light);
     --type-multiple: #a78bfa;
     --type-multiple-bg: rgba(124,58,237,0.15);
     --type-tf: #22d3ee;
@@ -231,8 +233,10 @@
 [data-theme="dark"] .dot { border-color: var(--border); }
 [data-theme="dark"] .option-card { background: var(--bg-secondary); }
 [data-theme="dark"] .search-box input { background: var(--bg-secondary); border-color: var(--border); color: var(--text-primary); }
+@media (hover: hover) {
 [data-theme="dark"] .bank-card:hover { box-shadow: 0 8px 24px rgba(129,140,248,0.1), var(--shadow-md); }
 [data-theme="dark"] .bank-card:hover .type-chip { border-color: rgba(129,140,248,0.2); background: var(--accent-light); color: var(--accent); }
+} /* end @media (hover: hover) */
 [data-theme="dark"] .badge-builtin { background: var(--accent-light); color: var(--accent); border-color: rgba(129,140,248,0.2); }
 [data-theme="dark"] .bank-group-tab { background: var(--bg-secondary); border-color: var(--border); color: var(--text-muted); }
 [data-theme="dark"] .bank-group-tab:hover { color: var(--accent); border-color: var(--accent); }
@@ -249,7 +253,9 @@
 [data-theme="dark"] .select-search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-subtle); }
 [data-theme="dark"] .sidebar-stat-card { background: var(--bg-secondary); border-color: var(--border); }
 [data-theme="dark"] .grid-btn { background: var(--bg-secondary); border-color: var(--border); }
+@media (hover: hover) {
 [data-theme="dark"] .grid-btn:hover { background: var(--bg-hover); }
+} /* end @media (hover: hover) */
 
 /* ===== Reset & Base ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -662,8 +668,11 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
     transform: translateY(-50%);
     width: 16px;
     height: 16px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
+    background-color: var(--text-muted);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
     background-position: center;
     pointer-events: none;
 }
@@ -714,12 +723,14 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
     min-height: 36px;
     min-width: 0;
 }
+@media (hover: hover) {
 .grid-btn:hover {
     background: var(--bg-hover);
     border-color: var(--accent);
     transform: translateY(-2px) scale(1.04);
     box-shadow: var(--shadow-accent);
 }
+} /* end @media (hover: hover) */
 .grid-btn.active {
     border-color: var(--accent);
     background: var(--accent-light);
@@ -865,6 +876,7 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
     line-height: 1.6;
     user-select: none;
 }
+@media (hover: hover) {
 .option-card:hover {
     border-color: var(--accent);
     border-left-color: var(--accent);
@@ -872,6 +884,7 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm), var(--glow-accent);
 }
+} /* end @media (hover: hover) */
 .option-card:active:not(.disabled) {
     transform: scale(0.98);
     transition-duration: 0.1s;
@@ -960,11 +973,13 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
     justify-content: center;
     gap: 8px;
 }
+@media (hover: hover) {
 .tf-btn:hover {
     border-color: var(--accent);
     background: var(--accent-light);
     transform: translateY(-1px);
 }
+} /* end @media (hover: hover) */
 .tf-btn.selected {
     border-color: var(--accent);
     background: var(--accent-light);
@@ -1172,9 +1187,9 @@ button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 
 /* ===== Answer Feedback Animations ===== */
 @keyframes pulseCorrect {
-    0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
-    70% { box-shadow: 0 0 0 14px rgba(16,185,129,0); }
-    100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    0% { transform: scale(1); outline: 0 solid transparent; }
+    50% { transform: scale(1.01); outline: 3px solid rgba(16,185,129,0.4); }
+    100% { transform: scale(1); outline: 0 solid transparent; }
 }
 @keyframes pulseIncorrect {
     0%, 100% { transform: translateX(0); }
@@ -1707,7 +1722,6 @@ kbd {
 }
 
 .banks-loading,
-.banks-empty,
 .banks-error {
     text-align: center;
     padding: 60px 20px;
@@ -1742,6 +1756,7 @@ kbd {
     transition: opacity 0.25s ease;
 }
 
+@media (hover: hover) {
 .bank-card:hover {
     border-color: var(--accent);
     box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12), var(--shadow-md);
@@ -1751,6 +1766,12 @@ kbd {
 .bank-card:hover::before {
     opacity: 1;
 }
+
+.bank-card:hover .bank-icon {
+    background: var(--accent-light);
+    transform: scale(1.05);
+}
+} /* end @media (hover: hover) */
 
 .bank-card:active {
     transform: translateY(0) scale(0.985);
@@ -1783,9 +1804,9 @@ kbd {
     color: var(--accent);
     transition: background 0.25s ease, transform 0.25s ease;
 }
-.bank-card:hover .bank-icon {
-    background: var(--accent-light);
-    transform: scale(1.05);
+.bank-icon svg {
+    width: 22px;
+    height: 22px;
 }
 
 .bank-info {
@@ -1824,11 +1845,6 @@ kbd {
     border: 1px solid rgba(37,99,235,0.15);
 }
 
-.badge-builtin {
-    background: var(--accent-light);
-    color: var(--accent);
-}
-
 .bank-card-types {
     display: flex;
     flex-wrap: wrap;
@@ -1845,11 +1861,13 @@ kbd {
     border: 1px solid var(--border);
     transition: all 0.2s ease;
 }
+@media (hover: hover) {
 .bank-card:hover .type-chip {
     border-color: rgba(37,99,235,0.15);
     background: var(--accent-light);
     color: var(--accent);
 }
+} /* end @media (hover: hover) */
 
 .bank-card-footer {
     display: flex;
@@ -2079,24 +2097,6 @@ kbd {
     font-size: 0.85rem !important;
     color: var(--text-muted);
     opacity: 0.7;
-}
-
-/* ===== Bank Icon SVG ===== */
-.bank-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    flex-shrink: 0;
-    color: var(--accent);
-    background: var(--accent-light);
-    border-radius: var(--radius-md);
-}
-
-.bank-icon svg {
-    width: 22px;
-    height: 22px;
 }
 
 /* ===== Admin Page ===== */
