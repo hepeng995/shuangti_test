@@ -17,7 +17,7 @@ var BADGE_CLASS = {
     single: '', multiple: 'type-multiple', tf: 'type-tf',
     fill: 'type-fill', short: 'type-short', analysis: 'type-analysis'
 };
-var SCORABLE = ['single', 'multiple', 'tf', 'fill'];
+var SCORABLE = ['single', 'multiple', 'tf'];
 
 // ===== State =====
 var quizData = [];
