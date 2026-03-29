@@ -34,6 +34,21 @@ var _docTouchStartHandler = null;
 var _docTouchEndHandler = null;
 var _searchTimer = null;
 
+// Sidebar toggle/backdrop handlers (named for safe re-binding)
+var _sidebarToggleHandler = function() {
+    dom.sidebar.classList.toggle('open');
+    var isOpen = dom.sidebar.classList.contains('open');
+    if (dom.sidebarBackdrop) {
+        dom.sidebarBackdrop.classList.toggle('show', isOpen);
+        dom.sidebarBackdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    }
+};
+var _sidebarBackdropHandler = function() {
+    dom.sidebar.classList.remove('open');
+    dom.sidebarBackdrop.classList.remove('show');
+    dom.sidebarBackdrop.setAttribute('aria-hidden', 'true');
+};
+
 // Filtered list cache
 var _filteredCache = null;
 
@@ -1311,20 +1326,11 @@ function bindEvents() {
     };
     document.addEventListener('keydown', _docKeyHandler);
 
-    dom.sidebarToggle.addEventListener('click', function() {
-        dom.sidebar.classList.toggle('open');
-        var isOpen = dom.sidebar.classList.contains('open');
-        if (dom.sidebarBackdrop) {
-            dom.sidebarBackdrop.classList.toggle('show', isOpen);
-            dom.sidebarBackdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-        }
-    });
+    dom.sidebarToggle.removeEventListener('click', _sidebarToggleHandler);
+    dom.sidebarToggle.addEventListener('click', _sidebarToggleHandler);
     if (dom.sidebarBackdrop) {
-        dom.sidebarBackdrop.addEventListener('click', function() {
-            dom.sidebar.classList.remove('open');
-            dom.sidebarBackdrop.classList.remove('show');
-            dom.sidebarBackdrop.setAttribute('aria-hidden', 'true');
-        });
+        dom.sidebarBackdrop.removeEventListener('click', _sidebarBackdropHandler);
+        dom.sidebarBackdrop.addEventListener('click', _sidebarBackdropHandler);
     }
 
     // Search with debounce
