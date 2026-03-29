@@ -1,4 +1,4 @@
-var CACHE_NAME = 'quiz-platform-v2';
+var CACHE_NAME = 'quiz-platform-v4';
 var CACHE_FILES = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ var CACHE_FILES = [
   './router.js',
   './quiz-core.js',
   './quiz-select.js',
+  './admin.js',
   './bank-java.js'
 ];
 

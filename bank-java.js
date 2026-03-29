@@ -4,6 +4,7 @@ registerBank({
   name: 'Java 编程语言题库',
   description: '共 194 道 Java 基础题，来源：z.pdf',
   icon: '☕',
+  group: '编程语言',
   source: 'builtin',
   mdContent: `# JAVA编程语言题库
 

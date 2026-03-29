@@ -3,7 +3,7 @@ var QuizDB = (function() {
     'use strict';
 
     var DB_NAME = 'QuizBankDB';
-    var DB_VERSION = 2;
+    var DB_VERSION = 3;
     var STORE_PROGRESS = 'quizProgress';
     var db = null;
 
@@ -31,6 +31,12 @@ var QuizDB = (function() {
                 if (!d.objectStoreNames.contains(STORE_PROGRESS)) {
                     var prog = d.createObjectStore(STORE_PROGRESS, { keyPath: 'quizBankId' });
                     prog.createIndex('last_access_idx', 'lastAccessedAt', { unique: false });
+                }
+                if (!d.objectStoreNames.contains('customBanks')) {
+                    d.createObjectStore('customBanks', { keyPath: 'id' });
+                }
+                if (!d.objectStoreNames.contains('bankMeta')) {
+                    d.createObjectStore('bankMeta', { keyPath: 'bankId' });
                 }
             };
             req.onsuccess = function(e) {
@@ -130,28 +136,71 @@ var QuizDB = (function() {
         return { total: total, types: types };
     }
 
-    // ===== Bank queries (from registered banks, not IndexedDB) =====
+    // ===== Bank queries (merge builtin + custom + meta overrides) =====
     function listBanks() {
-        return Promise.resolve(registeredBanks.map(function(b) {
-            return {
-                id: b.id,
-                name: b.name,
-                description: b.description,
-                icon: b.icon,
-                source: b.source,
-                questionCount: b.questionCount,
-                typeStats: b.typeStats,
-                createdAt: b.createdAt,
-                updatedAt: b.updatedAt
-            };
-        }));
+        return Promise.all([
+            listCustomBanks(),
+            getAllBankMeta()
+        ]).then(function(results) {
+            var custom = results[0] || [];
+            var metaArr = results[1] || [];
+            var metaMap = {};
+            for (var mi = 0; mi < metaArr.length; mi++) {
+                metaMap[metaArr[mi].bankId] = metaArr[mi];
+            }
+            var all = [];
+            // Builtin banks
+            for (var i = 0; i < registeredBanks.length; i++) {
+                var b = registeredBanks[i];
+                var item = {
+                    id: b.id, name: b.name, description: b.description,
+                    icon: b.icon, source: b.source || 'builtin',
+                    questionCount: b.questionCount, typeStats: b.typeStats,
+                    createdAt: b.createdAt, updatedAt: b.updatedAt, group: b.group
+                };
+                if (metaMap[b.id]) {
+                    var m = metaMap[b.id];
+                    if (m.name) item.name = m.name;
+                    if (m.description) item.description = m.description;
+                    if (m.icon) item.icon = m.icon;
+                    if (m.group) item.group = m.group;
+                }
+                all.push(item);
+            }
+            // Custom banks
+            for (var ci = 0; ci < custom.length; ci++) {
+                var c = custom[ci];
+                all.push({
+                    id: c.id, name: c.name, description: c.description,
+                    icon: c.icon, source: 'custom',
+                    questionCount: c.questionCount, typeStats: c.typeStats,
+                    createdAt: c.createdAt, updatedAt: c.updatedAt, group: c.group
+                });
+            }
+            return all;
+        });
     }
 
     function getBank(id) {
+        var builtin = null;
         for (var i = 0; i < registeredBanks.length; i++) {
-            if (registeredBanks[i].id === id) return Promise.resolve(registeredBanks[i]);
+            if (registeredBanks[i].id === id) { builtin = registeredBanks[i]; break; }
         }
-        return Promise.resolve(null);
+        if (builtin) {
+            return getBankMeta(id).then(function(meta) {
+                if (!meta) return builtin;
+                var result = {};
+                for (var k in builtin) {
+                    if (builtin.hasOwnProperty(k)) result[k] = builtin[k];
+                }
+                if (meta.name) result.name = meta.name;
+                if (meta.description) result.description = meta.description;
+                if (meta.icon) result.icon = meta.icon;
+                if (meta.group) result.group = meta.group;
+                return result;
+            });
+        }
+        return getCustomBank(id);
     }
 
     // ===== Progress CRUD (still in IndexedDB) =====
@@ -185,6 +234,75 @@ var QuizDB = (function() {
         });
     }
 
+    // ===== Custom Banks CRUD =====
+    function saveCustomBank(bank) {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction('customBanks', 'readwrite')
+                .objectStore('customBanks').put(bank);
+            req.onsuccess = function() { resolve(); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function getCustomBank(id) {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction('customBanks', 'readonly')
+                .objectStore('customBanks').get(id);
+            req.onsuccess = function(e) { resolve(e.target.result || null); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function listCustomBanks() {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction('customBanks', 'readonly')
+                .objectStore('customBanks').getAll();
+            req.onsuccess = function(e) { resolve(e.target.result || []); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function deleteCustomBank(id) {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction('customBanks', 'readwrite')
+                .objectStore('customBanks').delete(id);
+            req.onsuccess = function() { resolve(); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    // ===== Bank Meta Overrides (for builtin banks) =====
+    function saveBankMeta(bankId, meta) {
+        return new Promise(function(resolve, reject) {
+            var data = { bankId: bankId };
+            for (var k in meta) {
+                if (meta.hasOwnProperty(k)) data[k] = meta[k];
+            }
+            var req = db.transaction('bankMeta', 'readwrite')
+                .objectStore('bankMeta').put(data);
+            req.onsuccess = function() { resolve(); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function getBankMeta(bankId) {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction('bankMeta', 'readonly')
+                .objectStore('bankMeta').get(bankId);
+            req.onsuccess = function(e) { resolve(e.target.result || null); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function getAllBankMeta() {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction('bankMeta', 'readonly')
+                .objectStore('bankMeta').getAll();
+            req.onsuccess = function(e) { resolve(e.target.result || []); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
     return {
         init: init,
         registerBank: registerBank,
@@ -193,7 +311,13 @@ var QuizDB = (function() {
         getProgress: getProgress,
         saveProgress: saveProgress,
         deleteProgress: deleteProgress,
-        computeTypeStats: computeTypeStats
+        computeTypeStats: computeTypeStats,
+        saveCustomBank: saveCustomBank,
+        getCustomBank: getCustomBank,
+        listCustomBanks: listCustomBanks,
+        deleteCustomBank: deleteCustomBank,
+        saveBankMeta: saveBankMeta,
+        getBankMeta: getBankMeta
     };
 })();
 

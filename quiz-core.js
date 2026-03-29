@@ -1,6 +1,8 @@
 // ===== Application Logic =====
 // Expose parseQuestions globally
 var parseQuestions;
+// Expose toggleTheme globally for bootstrap binding on select page
+var toggleTheme;
 var currentBankId = null;
 
 (function() {
@@ -27,7 +29,7 @@ var state = {
     revealed: new Set(),
     filter: 'all',
     searchQuery: '',
-    theme: 'light',
+    theme: (function() { try { return localStorage.getItem('quiz_theme') || 'light'; } catch(e) { return 'light'; } })(),
     redoMode: false,
     redoQuestionIds: new Set(),
     savedSnapshot: null,
@@ -1013,8 +1015,8 @@ function importProgress(file) {
 }
 
 // ===== Theme =====
-function toggleTheme() {
-    var toggle = dom.themeToggle;
+toggleTheme = function() {
+    var toggle = dom.themeToggle || document.getElementById('theme-toggle');
     if (!toggle) return;
 
     var newTheme = state.theme === 'dark' ? 'light' : 'dark';
@@ -1077,8 +1079,9 @@ function toggleTheme() {
 
 function applyTheme() {
     document.documentElement.setAttribute('data-theme', state.theme);
-    var lightIcon = dom.themeToggle ? dom.themeToggle.querySelector('.theme-icon-light') : null;
-    var darkIcon = dom.themeToggle ? dom.themeToggle.querySelector('.theme-icon-dark') : null;
+    var toggle = dom.themeToggle || document.getElementById('theme-toggle');
+    var lightIcon = toggle ? toggle.querySelector('.theme-icon-light') : null;
+    var darkIcon = toggle ? toggle.querySelector('.theme-icon-dark') : null;
     if (lightIcon) lightIcon.classList.toggle('hidden', state.theme === 'dark');
     if (darkIcon) darkIcon.classList.toggle('hidden', state.theme === 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
@@ -1100,6 +1103,7 @@ function debouncedSaveState() {
 
 var _storageWarned = false;
 var _stateLoaded = false;
+var _eventsBound = false;
 
 function saveState() {
     if (!currentBankId) return;
@@ -1132,6 +1136,8 @@ function loadState() {
 
 // ===== Events =====
 function bindEvents() {
+    if (_eventsBound) return;
+    _eventsBound = true;
     dom.options.addEventListener('click', function(e) {
         var el = e.target.closest('[data-label]');
         if (el) selectOption(el.dataset.label);
@@ -1371,10 +1377,7 @@ function bindEvents() {
         }
     }, { passive: true });
 
-    // Theme Toggle
-    if (dom.themeToggle) {
-        dom.themeToggle.addEventListener('click', toggleTheme);
-    }
+    // Theme Toggle — already bound in bootstrap (index.html)
 
     // Export / Import
     if (dom.exportBtn) {
@@ -1511,6 +1514,7 @@ function destroyQuizPage() {
     // Reset
     currentBankId = null;
     _stateLoaded = false;
+    _eventsBound = false;
     quizData = [];
 }
 

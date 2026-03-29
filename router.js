@@ -5,6 +5,7 @@ var Router = (function() {
     var routes = {};
     var currentRoute = null;
     var currentParam = null;
+    var _initialized = false;
 
     function register(path, handler) {
         routes[path] = handler;
@@ -47,6 +48,8 @@ var Router = (function() {
     }
 
     function init() {
+        if (_initialized) return;
+        _initialized = true;
         window.addEventListener('hashchange', handleRoute);
         handleRoute();
     }
