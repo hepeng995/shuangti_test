@@ -423,7 +423,7 @@ function renderQuestion() {
     } else if (q.type === 'tf') {
         dom.options.innerHTML = buildTfOpts(q, revealed, userAns);
     } else if (q.type === 'fill') {
-        dom.options.innerHTML = buildFillInput(q, revealed, userAns);
+        dom.options.innerHTML = '';
     } else {
         dom.options.innerHTML = '';
     }
@@ -555,26 +555,8 @@ function buildTfOpts(q, revealed, userAns) {
     return h;
 }
 
-function buildFillInput(q, revealed, userAns) {
-    if (revealed) {
-        var ok = checkCorrect(q);
-        var color = ok ? 'var(--correct)' : 'var(--incorrect)';
-        var border = ok ? 'var(--correct)' : 'var(--incorrect)';
-        return '<div class="fill-result">' +
-            '<div class="fill-your-answer" style="border-color:' + border + '">' +
-            '<span class="fill-label">你的答案</span>' +
-            '<span class="fill-value" style="color:' + color + '">' + esc(userAns || '(未作答)') + '</span>' +
-            '</div>' +
-            '<div class="fill-correct-answer">' +
-            '<span class="fill-label">正确答案</span>' +
-            '<span class="fill-value">' + formatText(q.answer) + '</span>' +
-            '</div>' +
-            '</div>';
-    }
-    var val = userAns || '';
-    return '<div class="fill-input-wrap">' +
-        '<input type="text" id="fill-input" class="fill-input" placeholder="请输入答案..." value="' + esc(val) + '" autocomplete="off" aria-label="填空答案">' +
-        '</div>';
+function buildFillInput() {
+    return '';
 }
 
 // ===== Stats =====
@@ -1176,18 +1158,6 @@ function bindEvents() {
         if (e.key === 'Enter' || e.key === ' ') {
             var el = e.target.closest('[data-label]');
             if (el) { selectOption(el.dataset.label); e.preventDefault(); }
-        }
-    });
-
-    // Fill-in-the-blank input handling
-    dom.options.addEventListener('input', function(e) {
-        if (e.target.id === 'fill-input') {
-            var filtered = getFiltered();
-            if (!filtered.length) return;
-            var q = filtered[state.currentIndex];
-            if (!q || isRevealed(q)) return;
-            state.answers[q.id] = e.target.value;
-            dom.showBtn.disabled = !e.target.value.trim();
         }
     });
 
