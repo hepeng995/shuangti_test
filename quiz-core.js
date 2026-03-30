@@ -979,6 +979,7 @@ function restart() {
     showConfirm('确定要重新开始吗？所有答题进度将被清除。', function() {
         invalidateFilterCache();
         state.answers = {};
+        state.revealed = new Set();
         state.currentIndex = 0;
         state.filter = 'all';
         dom.filters.querySelectorAll('button').forEach(function(btn) {
