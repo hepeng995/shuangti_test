@@ -784,6 +784,13 @@ function exitRedoMode(mergeResults) {
     if (mergeResults && state.savedSnapshot) {
         var origAnswers = state.savedSnapshot.answers;
         var origRevealed = state.savedSnapshot.revealed;
+        // 防御性类型检查：确保 origRevealed 是 Set，origAnswers 是对象
+        if (!(origRevealed instanceof Set)) {
+            origRevealed = new Set(Array.isArray(origRevealed) ? origRevealed : []);
+        }
+        if (!origAnswers || typeof origAnswers !== 'object') {
+            origAnswers = {};
+        }
 
         state.redoQuestionIds.forEach(function(id) {
             var q = null;
@@ -799,8 +806,11 @@ function exitRedoMode(mergeResults) {
         state.answers = origAnswers;
         state.revealed = origRevealed;
     } else if (state.savedSnapshot) {
-        state.answers = state.savedSnapshot.answers;
-        state.revealed = state.savedSnapshot.revealed;
+        state.answers = state.savedSnapshot.answers || {};
+        var snapRev = state.savedSnapshot.revealed;
+        state.revealed = snapRev instanceof Set
+            ? snapRev
+            : new Set(Array.isArray(snapRev) ? snapRev : []);
     }
 
     state.redoMode = false;
@@ -1154,7 +1164,10 @@ function saveState() {
             theme: state.theme,
             redoMode: state.redoMode,
             redoQuestionIds: Array.from(state.redoQuestionIds),
-            savedSnapshot: state.savedSnapshot,
+            savedSnapshot: state.savedSnapshot ? {
+                answers: state.savedSnapshot.answers,
+                revealed: Array.from(state.savedSnapshot.revealed)
+            } : null,
             bookmarked: Array.from(state.bookmarked),
             lastAccessedAt: new Date().toISOString()
         }).catch(function(e) {
@@ -1503,7 +1516,18 @@ function initQuizPage(bankId) {
                 state.theme = prog.theme || localStorage.getItem('quiz_theme') || 'light';
                 state.redoMode = prog.redoMode || false;
                 state.redoQuestionIds = new Set(prog.redoQuestionIds || []);
-                state.savedSnapshot = prog.savedSnapshot || null;
+                if (prog.savedSnapshot) {
+                    var snapRev = prog.savedSnapshot.revealed;
+                    state.savedSnapshot = {
+                        answers: prog.savedSnapshot.answers || {},
+                        revealed: new Set(
+                            snapRev instanceof Set ? Array.from(snapRev)
+                                : (Array.isArray(snapRev) ? snapRev : [])
+                        )
+                    };
+                } else {
+                    state.savedSnapshot = null;
+                }
                 state.bookmarked = new Set(prog.bookmarked || []);
             } else {
                 state.theme = localStorage.getItem('quiz_theme') || 'light';
