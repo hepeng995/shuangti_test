@@ -532,7 +532,7 @@ function buildMultiOpts(q, revealed, userAns) {
     var cor = q.answer.split('');
     var hint = '';
     if (!revealed) {
-        hint = '<div class="multi-hint">请选择 ' + cor.length + ' 项 · 已选 ' + sel.length + ' 项</div>';
+        hint = '<div class="multi-hint">已选 ' + sel.length + ' 项</div>';
     }
     var h = hint;
     q.options.forEach(function(o) {
@@ -637,7 +637,7 @@ function selectOption(label) {
         });
         var hintEl = dom.options.querySelector('.multi-hint');
         if (hintEl) {
-            hintEl.textContent = '请选择 ' + q.answer.split('').length + ' 项 · 已选 ' + sel.length + ' 项';
+            hintEl.textContent = '已选 ' + sel.length + ' 项';
         }
     }
 
