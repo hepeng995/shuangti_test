@@ -1341,7 +1341,10 @@ function bindEvents() {
             var filtered = getFiltered();
             if (filtered.length > 0) {
                 var q = filtered[state.currentIndex];
-                if (q && isScorable(q) && !isRevealed(q) && state.answers[q.id]) revealAnswer();
+                if (q && !isRevealed(q)) {
+                    if (isScorable(q) && state.answers[q.id]) revealAnswer();
+                    else if (!isScorable(q)) revealAnswer();
+                }
             }
             e.preventDefault();
         }
