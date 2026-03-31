@@ -67,6 +67,7 @@ var state = {
     redoQuestionIds: new Set(),
     savedSnapshot: null,
     bookmarked: new Set(),
+    shuffleOrder: null,  // null = original order; { [qId]: [2,0,3,1] } after restart
 };
 
 // ===== DOM Cache =====
@@ -127,6 +128,52 @@ function initDom() {
 var ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function esc(s) {
     return String(s).replace(/[&<>"']/g, function(c) { return ESC_MAP[c]; });
+}
+
+function shuffleArray(arr) {
+    var copy = arr.slice();
+    for (var i = copy.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = copy[i];
+        copy[i] = copy[j];
+        copy[j] = tmp;
+    }
+    return copy;
+}
+
+function generateShuffleOrders() {
+    var orders = {};
+    quizData.forEach(function(q) {
+        if (q.type !== 'single' && q.type !== 'multiple') return;
+        if (!q.options || q.options.length <= 1) return;
+        var indices = [];
+        for (var i = 0; i < q.options.length; i++) indices.push(i);
+        orders[q.id] = shuffleArray(indices);
+    });
+    return orders;
+}
+
+function getShuffledOptions(q) {
+    if (!q.options) return q.options;
+    if (!state.shuffleOrder) return q.options;
+    var order = state.shuffleOrder[q.id];
+    if (!order || order.length !== q.options.length) return q.options;
+    return order.map(function(idx) { return q.options[idx]; });
+}
+
+function toDisplayLabels(q, originalLabels) {
+    if (!originalLabels) return originalLabels;
+    if (!state.shuffleOrder || !state.shuffleOrder[q.id]) return originalLabels;
+    if (q.type !== 'single' && q.type !== 'multiple') return originalLabels;
+    var opts = getShuffledOptions(q);
+    var chars = originalLabels.split('');
+    var result = [];
+    opts.forEach(function(o, i) {
+        if (chars.indexOf(o.label) !== -1) {
+            result.push(String.fromCharCode(65 + i));
+        }
+    });
+    return result.sort().join('');
 }
 
 function formatText(t) {
@@ -465,8 +512,8 @@ function renderQuestion() {
             var prefix = ok ? '✓ 回答正确' : '✗ 回答错误';
             var color = ok ? 'var(--correct)' : 'var(--incorrect)';
             dom.ansText.innerHTML = '<span style="color:' + color + ';font-weight:700">' + prefix + '</span><br>' +
-                '正确答案：' + esc(q.answer) +
-                (userAns !== undefined ? '<br>你的答案：' + esc(userAns) : '');
+                '正确答案：' + esc(toDisplayLabels(q, q.answer)) +
+                (userAns !== undefined ? '<br>你的答案：' + esc(toDisplayLabels(q, userAns)) : '');
         } else {
             dom.ansText.innerHTML = formatText(q.answer);
         }
@@ -508,8 +555,10 @@ function renderQuestion() {
 
 function buildSingleOpts(q, revealed, userAns) {
     if (!q.options) return '';
+    var opts = getShuffledOptions(q);
     var h = '';
-    q.options.forEach(function(o) {
+    opts.forEach(function(o, i) {
+        var displayLabel = String.fromCharCode(65 + i);
         var c = 'option-card';
         if (revealed) {
             c += ' disabled';
@@ -520,7 +569,7 @@ function buildSingleOpts(q, revealed, userAns) {
         }
         var checked = (userAns === o.label) ? 'true' : 'false';
         h += '<div class="' + c + '" data-label="' + o.label + '" role="radio" aria-checked="' + checked + '" tabindex="0">' +
-            '<span class="option-label">' + o.label + '</span>' +
+            '<span class="option-label">' + displayLabel + '</span>' +
             '<span class="option-text">' + formatText(o.text) + '</span></div>';
     });
     return h;
@@ -528,6 +577,7 @@ function buildSingleOpts(q, revealed, userAns) {
 
 function buildMultiOpts(q, revealed, userAns) {
     if (!q.options) return '';
+    var opts = getShuffledOptions(q);
     var sel = userAns ? userAns.split('') : [];
     var cor = q.answer.split('');
     var hint = '';
@@ -535,7 +585,8 @@ function buildMultiOpts(q, revealed, userAns) {
         hint = '<div class="multi-hint">已选 ' + sel.length + ' 项</div>';
     }
     var h = hint;
-    q.options.forEach(function(o) {
+    opts.forEach(function(o, i) {
+        var displayLabel = String.fromCharCode(65 + i);
         var c = 'option-card';
         if (revealed) {
             c += ' disabled';
@@ -546,7 +597,7 @@ function buildMultiOpts(q, revealed, userAns) {
         }
         var checked = (sel.indexOf(o.label) !== -1) ? 'true' : 'false';
         h += '<div class="' + c + '" data-label="' + o.label + '" role="checkbox" aria-checked="' + checked + '" tabindex="0">' +
-            '<span class="option-label">' + o.label + '</span>' +
+            '<span class="option-label">' + displayLabel + '</span>' +
             '<span class="option-text">' + formatText(o.text) + '</span></div>';
     });
     return h;
@@ -667,7 +718,7 @@ function revealAnswer() {
         // Announce feedback for screen readers
         var feedbackEl = document.getElementById('answer-feedback');
         if (feedbackEl) {
-            feedbackEl.textContent = ok ? '回答正确' : '回答错误，正确答案是：' + q.answer;
+            feedbackEl.textContent = ok ? '回答正确' : '回答错误，正确答案是：' + toDisplayLabels(q, q.answer);
         }
         if (card) {
             card.classList.add(ok ? 'feedback-correct' : 'feedback-incorrect');
@@ -982,6 +1033,7 @@ function restart() {
         state.revealed = new Set();
         state.currentIndex = 0;
         state.filter = 'all';
+        state.shuffleOrder = generateShuffleOrders();
         dom.filters.querySelectorAll('button').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.filter === 'all');
         });
@@ -1004,7 +1056,8 @@ function exportProgress() {
         revealed: Array.from(state.revealed),
         filter: state.filter,
         theme: state.theme,
-        bookmarked: Array.from(state.bookmarked)
+        bookmarked: Array.from(state.bookmarked),
+        shuffleOrder: state.shuffleOrder
     };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
@@ -1047,6 +1100,7 @@ function importProgress(file) {
                 state.redoMode = false;
                 state.redoQuestionIds = new Set();
                 state.savedSnapshot = null;
+                state.shuffleOrder = d.shuffleOrder || null;
                 applyTheme();
                 dom.filters.querySelectorAll('button').forEach(function(btn) {
                     btn.classList.toggle('active', btn.dataset.filter === state.filter);
@@ -1170,6 +1224,7 @@ function saveState() {
                 revealed: Array.from(state.savedSnapshot.revealed)
             } : null,
             bookmarked: Array.from(state.bookmarked),
+            shuffleOrder: state.shuffleOrder,
             lastAccessedAt: new Date().toISOString()
         }).catch(function(e) {
             console.warn('saveState IDB:', e);
@@ -1354,7 +1409,8 @@ function bindEvents() {
                 var q = filtered[state.currentIndex];
                 if (q && q.options && !isRevealed(q)) {
                     var idx = parseInt(e.key) - 1;
-                    if (idx < q.options.length) selectOption(q.options[idx].label);
+                    var shuffled = getShuffledOptions(q);
+                    if (idx < shuffled.length) selectOption(shuffled[idx].label);
                 }
             }
             e.preventDefault();
@@ -1364,9 +1420,9 @@ function bindEvents() {
             if (filtered.length > 0) {
                 var q = filtered[state.currentIndex];
                 if (q && q.options && !isRevealed(q)) {
-                    var label = e.key.toUpperCase();
-                    var found = q.options.some(function(o) { return o.label === label; });
-                    if (found) selectOption(label);
+                    var displayIdx = e.key.toUpperCase().charCodeAt(0) - 65;
+                    var shuffled = getShuffledOptions(q);
+                    if (displayIdx < shuffled.length) selectOption(shuffled[displayIdx].label);
                 }
             }
             e.preventDefault();
@@ -1533,8 +1589,10 @@ function initQuizPage(bankId) {
                     state.savedSnapshot = null;
                 }
                 state.bookmarked = new Set(prog.bookmarked || []);
+                state.shuffleOrder = prog.shuffleOrder || null;
             } else {
                 state.theme = localStorage.getItem('quiz_theme') || 'light';
+                state.shuffleOrder = null;
             }
             _stateLoaded = true;
 
@@ -1582,6 +1640,7 @@ function resetState() {
         redoQuestionIds: new Set(),
         savedSnapshot: null,
         bookmarked: new Set(),
+        shuffleOrder: null,
     };
 }
 
