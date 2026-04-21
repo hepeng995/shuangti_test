@@ -3,9 +3,13 @@ var QuizDB = (function() {
     'use strict';
 
     var DB_NAME = 'QuizBankDB';
-    var DB_VERSION = 3;
+    var DB_VERSION = 4;
     var STORE_PROGRESS = 'quizProgress';
+    var STORE_CUSTOM_BANKS = 'customBanks';
+    var STORE_BANK_META = 'bankMeta';
+    var STORE_GROUP_DEFS = 'groupDefs';
     var db = null;
+    var HAS_OWN = Object.prototype.hasOwnProperty;
 
     // ===== Registered banks (from bank-*.js files) =====
     var registeredBanks = [];
@@ -32,11 +36,14 @@ var QuizDB = (function() {
                     var prog = d.createObjectStore(STORE_PROGRESS, { keyPath: 'quizBankId' });
                     prog.createIndex('last_access_idx', 'lastAccessedAt', { unique: false });
                 }
-                if (!d.objectStoreNames.contains('customBanks')) {
-                    d.createObjectStore('customBanks', { keyPath: 'id' });
+                if (!d.objectStoreNames.contains(STORE_CUSTOM_BANKS)) {
+                    d.createObjectStore(STORE_CUSTOM_BANKS, { keyPath: 'id' });
                 }
-                if (!d.objectStoreNames.contains('bankMeta')) {
-                    d.createObjectStore('bankMeta', { keyPath: 'bankId' });
+                if (!d.objectStoreNames.contains(STORE_BANK_META)) {
+                    d.createObjectStore(STORE_BANK_META, { keyPath: 'bankId' });
+                }
+                if (!d.objectStoreNames.contains(STORE_GROUP_DEFS)) {
+                    d.createObjectStore(STORE_GROUP_DEFS, { keyPath: 'name' });
                 }
             };
             req.onsuccess = function(e) {
@@ -416,6 +423,15 @@ var QuizDB = (function() {
         return { total: questions.length, types: types };
     }
 
+    function applyMetaOverrides(target, meta) {
+        if (!meta) return target;
+        if (HAS_OWN.call(meta, 'name')) target.name = meta.name;
+        if (HAS_OWN.call(meta, 'description')) target.description = meta.description;
+        if (HAS_OWN.call(meta, 'icon')) target.icon = meta.icon;
+        if (HAS_OWN.call(meta, 'group')) target.group = meta.group;
+        return target;
+    }
+
     // ===== Bank queries (merge builtin + custom + meta overrides) =====
     function listBanks() {
         return Promise.all([
@@ -438,13 +454,7 @@ var QuizDB = (function() {
                     questionCount: b.questionCount, typeStats: b.typeStats,
                     createdAt: b.createdAt, updatedAt: b.updatedAt, group: b.group
                 };
-                if (metaMap[b.id]) {
-                    var m = metaMap[b.id];
-                    if (m.name) item.name = m.name;
-                    if (m.description) item.description = m.description;
-                    if (m.icon) item.icon = m.icon;
-                    if (m.group) item.group = m.group;
-                }
+                applyMetaOverrides(item, metaMap[b.id]);
                 all.push(item);
             }
             // Custom banks
@@ -468,16 +478,11 @@ var QuizDB = (function() {
         }
         if (builtin) {
             return getBankMeta(id).then(function(meta) {
-                if (!meta) return builtin;
                 var result = {};
                 for (var k in builtin) {
-                    if (builtin.hasOwnProperty(k)) result[k] = builtin[k];
+                    if (HAS_OWN.call(builtin, k)) result[k] = builtin[k];
                 }
-                if (meta.name) result.name = meta.name;
-                if (meta.description) result.description = meta.description;
-                if (meta.icon) result.icon = meta.icon;
-                if (meta.group) result.group = meta.group;
-                return result;
+                return applyMetaOverrides(result, meta);
             });
         }
         return getCustomBank(id);
@@ -517,8 +522,8 @@ var QuizDB = (function() {
     // ===== Custom Banks CRUD =====
     function saveCustomBank(bank) {
         return new Promise(function(resolve, reject) {
-            var req = db.transaction('customBanks', 'readwrite')
-                .objectStore('customBanks').put(bank);
+            var req = db.transaction(STORE_CUSTOM_BANKS, 'readwrite')
+                .objectStore(STORE_CUSTOM_BANKS).put(bank);
             req.onsuccess = function() { resolve(); };
             req.onerror = function(e) { reject(e.target.error); };
         });
@@ -526,8 +531,8 @@ var QuizDB = (function() {
 
     function getCustomBank(id) {
         return new Promise(function(resolve, reject) {
-            var req = db.transaction('customBanks', 'readonly')
-                .objectStore('customBanks').get(id);
+            var req = db.transaction(STORE_CUSTOM_BANKS, 'readonly')
+                .objectStore(STORE_CUSTOM_BANKS).get(id);
             req.onsuccess = function(e) { resolve(e.target.result || null); };
             req.onerror = function(e) { reject(e.target.error); };
         });
@@ -535,8 +540,8 @@ var QuizDB = (function() {
 
     function listCustomBanks() {
         return new Promise(function(resolve, reject) {
-            var req = db.transaction('customBanks', 'readonly')
-                .objectStore('customBanks').getAll();
+            var req = db.transaction(STORE_CUSTOM_BANKS, 'readonly')
+                .objectStore(STORE_CUSTOM_BANKS).getAll();
             req.onsuccess = function(e) { resolve(e.target.result || []); };
             req.onerror = function(e) { reject(e.target.error); };
         });
@@ -544,8 +549,8 @@ var QuizDB = (function() {
 
     function deleteCustomBank(id) {
         return new Promise(function(resolve, reject) {
-            var req = db.transaction('customBanks', 'readwrite')
-                .objectStore('customBanks').delete(id);
+            var req = db.transaction(STORE_CUSTOM_BANKS, 'readwrite')
+                .objectStore(STORE_CUSTOM_BANKS).delete(id);
             req.onsuccess = function() { resolve(); };
             req.onerror = function(e) { reject(e.target.error); };
         });
@@ -556,10 +561,10 @@ var QuizDB = (function() {
         return new Promise(function(resolve, reject) {
             var data = { bankId: bankId };
             for (var k in meta) {
-                if (meta.hasOwnProperty(k)) data[k] = meta[k];
+                if (HAS_OWN.call(meta, k)) data[k] = meta[k];
             }
-            var req = db.transaction('bankMeta', 'readwrite')
-                .objectStore('bankMeta').put(data);
+            var req = db.transaction(STORE_BANK_META, 'readwrite')
+                .objectStore(STORE_BANK_META).put(data);
             req.onsuccess = function() { resolve(); };
             req.onerror = function(e) { reject(e.target.error); };
         });
@@ -567,8 +572,8 @@ var QuizDB = (function() {
 
     function getBankMeta(bankId) {
         return new Promise(function(resolve, reject) {
-            var req = db.transaction('bankMeta', 'readonly')
-                .objectStore('bankMeta').get(bankId);
+            var req = db.transaction(STORE_BANK_META, 'readonly')
+                .objectStore(STORE_BANK_META).get(bankId);
             req.onsuccess = function(e) { resolve(e.target.result || null); };
             req.onerror = function(e) { reject(e.target.error); };
         });
@@ -576,9 +581,48 @@ var QuizDB = (function() {
 
     function getAllBankMeta() {
         return new Promise(function(resolve, reject) {
-            var req = db.transaction('bankMeta', 'readonly')
-                .objectStore('bankMeta').getAll();
+            var req = db.transaction(STORE_BANK_META, 'readonly')
+                .objectStore(STORE_BANK_META).getAll();
             req.onsuccess = function(e) { resolve(e.target.result || []); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function listGroupDefs() {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction(STORE_GROUP_DEFS, 'readonly')
+                .objectStore(STORE_GROUP_DEFS).getAll();
+            req.onsuccess = function(e) {
+                var rows = e.target.result || [];
+                var names = [];
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i] && typeof rows[i].name === 'string') names.push(rows[i].name);
+                }
+                resolve(names);
+            };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function saveGroupDef(name) {
+        return new Promise(function(resolve, reject) {
+            var groupName = String(name || '').trim();
+            if (!groupName) {
+                reject(new Error('分组名称不能为空'));
+                return;
+            }
+            var req = db.transaction(STORE_GROUP_DEFS, 'readwrite')
+                .objectStore(STORE_GROUP_DEFS).put({ name: groupName });
+            req.onsuccess = function() { resolve(); };
+            req.onerror = function(e) { reject(e.target.error); };
+        });
+    }
+
+    function deleteGroupDef(name) {
+        return new Promise(function(resolve, reject) {
+            var req = db.transaction(STORE_GROUP_DEFS, 'readwrite')
+                .objectStore(STORE_GROUP_DEFS).delete(name);
+            req.onsuccess = function() { resolve(); };
             req.onerror = function(e) { reject(e.target.error); };
         });
     }
@@ -598,7 +642,10 @@ var QuizDB = (function() {
         listCustomBanks: listCustomBanks,
         deleteCustomBank: deleteCustomBank,
         saveBankMeta: saveBankMeta,
-        getBankMeta: getBankMeta
+        getBankMeta: getBankMeta,
+        listGroupDefs: listGroupDefs,
+        saveGroupDef: saveGroupDef,
+        deleteGroupDef: deleteGroupDef
     };
 })();
 

@@ -22,6 +22,7 @@ var AdminPanel = (function() {
     // ===== State =====
     var allBanks = [];
     var allGroups = [];
+    var persistedGroupDefs = [];
     var pendingUpload = null;
     var editingBankId = null;
 
@@ -49,6 +50,67 @@ var AdminPanel = (function() {
             }
         }
         return id;
+    }
+
+    function addUniqueGroup(list, groupName) {
+        var normalized = groupName || '其他';
+        if (list.indexOf(normalized) === -1) list.push(normalized);
+    }
+
+    function rebuildGroupState() {
+        allGroups = [];
+        for (var i = 0; i < persistedGroupDefs.length; i++) {
+            addUniqueGroup(allGroups, persistedGroupDefs[i]);
+        }
+        for (var j = 0; j < allBanks.length; j++) {
+            addUniqueGroup(allGroups, allBanks[j].group || '其他');
+        }
+        allGroups.sort();
+    }
+
+    function isPersistedStandaloneGroup(groupName) {
+        return persistedGroupDefs.indexOf(groupName) !== -1;
+    }
+
+    function applyGroupSelectOptions(selectEl, current, includeBlank) {
+        if (!selectEl) return;
+        var currentValue = current || '';
+        selectEl.innerHTML = includeBlank ? '<option value="">-- 选择分组 --</option>' : '';
+        for (var i = 0; i < allGroups.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = allGroups[i];
+            opt.textContent = allGroups[i];
+            if (allGroups[i] === currentValue) opt.selected = true;
+            selectEl.appendChild(opt);
+        }
+        var newOpt = document.createElement('option');
+        newOpt.value = '__new__';
+        newOpt.textContent = '+ 新建分组';
+        selectEl.appendChild(newOpt);
+        selectEl.dataset.previousValue = currentValue;
+        if (currentValue) {
+            selectEl.value = currentValue;
+        } else if (includeBlank) {
+            selectEl.value = '';
+        }
+    }
+
+    function showAdminError(prefix, err) {
+        var msg = (err && err.message) ? err.message : '未知错误';
+        showToast(prefix + ': ' + msg, 'error', 5000);
+    }
+
+    function bindGroupSelectNewOption(selectEl, fallbackValue, includeBlank) {
+        if (!selectEl || selectEl.dataset.newGroupBound === '1') return;
+        selectEl.dataset.previousValue = fallbackValue || '';
+        selectEl.dataset.newGroupBound = '1';
+        selectEl.addEventListener('change', function() {
+            if (selectEl.value === '__new__') {
+                handleGroupNewOption(selectEl, selectEl.dataset.previousValue || fallbackValue || '', includeBlank);
+            } else {
+                selectEl.dataset.previousValue = selectEl.value;
+            }
+        });
     }
 
     // SHA-256 hash helper (uses Web Crypto API, async)
@@ -204,17 +266,19 @@ var AdminPanel = (function() {
     // ===== Data Loading =====
     function loadAndRender() {
         showBankListSkeleton();
-        QuizDB.listBanks().then(function(banks) {
+        QuizDB.listGroupDefs().then(function(groupDefs) {
+            persistedGroupDefs = groupDefs || [];
+            return QuizDB.listBanks();
+        }).then(function(banks) {
             allBanks = banks || [];
-            allGroups = [];
-            for (var i = 0; i < allBanks.length; i++) {
-                var g = allBanks[i].group || '其他';
-                if (allGroups.indexOf(g) === -1) allGroups.push(g);
-            }
-            allGroups.sort();
+            rebuildGroupState();
             renderBankList();
             renderGroupList();
             updateGroupSelect();
+        }).catch(function(e) {
+            if (bankListEl) bankListEl.innerHTML = '<div class="admin-empty">加载失败</div>';
+            if (groupListEl) groupListEl.innerHTML = '<div class="admin-empty">加载失败</div>';
+            showAdminError('加载管理员数据失败', e);
         });
     }
 
@@ -259,11 +323,7 @@ var AdminPanel = (function() {
         }
 
         // Handle "new group" in upload form select
-        if (uploadGroupSelect) {
-            uploadGroupSelect.addEventListener('change', function() {
-                handleGroupNewOption(uploadGroupSelect);
-            });
-        }
+        if (uploadGroupSelect) bindGroupSelectNewOption(uploadGroupSelect, '', true);
     }
 
     function handleFile(file) {
@@ -440,46 +500,32 @@ var AdminPanel = (function() {
     function updateGroupSelect() {
         if (!uploadGroupSelect) return;
         var current = uploadGroupSelect.value;
-        uploadGroupSelect.innerHTML = '<option value="">-- 选择分组 --</option>';
-        for (var i = 0; i < allGroups.length; i++) {
-            var opt = document.createElement('option');
-            opt.value = allGroups[i];
-            opt.textContent = allGroups[i];
-            if (allGroups[i] === current) opt.selected = true;
-            uploadGroupSelect.appendChild(opt);
-        }
-        var newOpt = document.createElement('option');
-        newOpt.value = '__new__';
-        newOpt.textContent = '+ 新建分组';
-        uploadGroupSelect.appendChild(newOpt);
+        applyGroupSelectOptions(uploadGroupSelect, current, true);
     }
 
-    function handleGroupNewOption(selectEl) {
+    function handleGroupNewOption(selectEl, previousValue, includeBlank) {
         if (selectEl.value !== '__new__') return;
         var newName = prompt('请输入新分组名称:');
         if (newName && newName.trim()) {
             newName = newName.trim();
-            if (allGroups.indexOf(newName) === -1) {
-                allGroups.push(newName);
-                allGroups.sort();
+            if (allGroups.indexOf(newName) !== -1) {
+                applyGroupSelectOptions(selectEl, newName, includeBlank);
+                showToast('分组「' + newName + '」已存在', 'warning');
+                return;
             }
-            // Rebuild select
-            var val = newName;
-            selectEl.innerHTML = '<option value="">-- 选择分组 --</option>';
-            for (var i = 0; i < allGroups.length; i++) {
-                var opt = document.createElement('option');
-                opt.value = allGroups[i];
-                opt.textContent = allGroups[i];
-                if (allGroups[i] === val) opt.selected = true;
-                selectEl.appendChild(opt);
-            }
-            var newOpt = document.createElement('option');
-            newOpt.value = '__new__';
-            newOpt.textContent = '+ 新建分组';
-            selectEl.appendChild(newOpt);
-            selectEl.value = val;
+            QuizDB.saveGroupDef(newName).then(function() {
+                persistedGroupDefs.push(newName);
+                rebuildGroupState();
+                renderGroupList();
+                updateGroupSelect();
+                applyGroupSelectOptions(selectEl, newName, includeBlank);
+                showToast('分组「' + newName + '」已添加', 'success');
+            }).catch(function(e) {
+                applyGroupSelectOptions(selectEl, previousValue || '', includeBlank);
+                showAdminError('保存分组失败', e);
+            });
         } else {
-            selectEl.value = '';
+            applyGroupSelectOptions(selectEl, previousValue || '', includeBlank);
         }
     }
 
@@ -557,6 +603,8 @@ var AdminPanel = (function() {
                     }).then(function() {
                         showToast('题库「' + bank.name + '」已删除', 'success');
                         loadAndRender();
+                    }).catch(function(err) {
+                        showAdminError('删除题库失败', err);
                     });
                 });
             });
@@ -607,11 +655,7 @@ var AdminPanel = (function() {
 
         // Handle "new group" in edit form select
         var editGroupSelect = document.getElementById('edit-group-' + bankId);
-        if (editGroupSelect) {
-            editGroupSelect.addEventListener('change', function() {
-                handleGroupNewOption(editGroupSelect);
-            });
-        }
+        if (editGroupSelect) bindGroupSelectNewOption(editGroupSelect, bank.group || '其他', false);
 
         var saveBtn = form.querySelector('.admin-edit-save');
         var cancelBtn = form.querySelector('.admin-edit-cancel');
@@ -654,8 +698,8 @@ var AdminPanel = (function() {
 
     function saveBankMeta(bankId, isCustom, meta) {
         if (isCustom) {
-            QuizDB.getCustomBank(bankId).then(function(bank) {
-                if (!bank) return;
+            return QuizDB.getCustomBank(bankId).then(function(bank) {
+                if (!bank) throw new Error('题库不存在');
                 bank.name = meta.name;
                 bank.description = meta.description;
                 bank.icon = meta.icon;
@@ -666,12 +710,16 @@ var AdminPanel = (function() {
                 editingBankId = null;
                 showToast('题库信息已更新', 'success');
                 loadAndRender();
+            }).catch(function(e) {
+                showAdminError('更新题库信息失败', e);
             });
         } else {
-            QuizDB.saveBankMeta(bankId, meta).then(function() {
+            return QuizDB.saveBankMeta(bankId, meta).then(function() {
                 editingBankId = null;
                 showToast('题库信息已更新', 'success');
                 loadAndRender();
+            }).catch(function(e) {
+                showAdminError('更新题库信息失败', e);
             });
         }
     }
@@ -719,7 +767,16 @@ var AdminPanel = (function() {
         if (deleteBtn) {
             deleteBtn.addEventListener('click', function() {
                 showConfirm('确认删除', '确定删除空分组「' + groupName + '」吗？', function() {
-                    loadAndRender();
+                    QuizDB.deleteGroupDef(groupName).then(function() {
+                        var idx = persistedGroupDefs.indexOf(groupName);
+                        if (idx !== -1) persistedGroupDefs.splice(idx, 1);
+                        rebuildGroupState();
+                        renderGroupList();
+                        updateGroupSelect();
+                        showToast('分组「' + groupName + '」已删除', 'success');
+                    }).catch(function(e) {
+                        showAdminError('删除分组失败', e);
+                    });
                 });
             });
         }
@@ -729,6 +786,10 @@ var AdminPanel = (function() {
 
     function renameGroup(oldName, newName) {
         var promises = [];
+        if (isPersistedStandaloneGroup(oldName)) {
+            promises.push(QuizDB.saveGroupDef(newName));
+            promises.push(QuizDB.deleteGroupDef(oldName));
+        }
         for (var i = 0; i < allBanks.length; i++) {
             var bank = allBanks[i];
             if ((bank.group || '其他') === oldName) {
@@ -753,7 +814,14 @@ var AdminPanel = (function() {
             }
         }
         Promise.all(promises).then(function() {
+            var oldIdx = persistedGroupDefs.indexOf(oldName);
+            if (oldIdx !== -1) persistedGroupDefs.splice(oldIdx, 1);
+            if (isPersistedStandaloneGroup(newName) === false && oldIdx !== -1) persistedGroupDefs.push(newName);
+            rebuildGroupState();
+            showToast('分组已重命名', 'success');
             loadAndRender();
+        }).catch(function(e) {
+            showAdminError('重命名分组失败', e);
         });
     }
 
@@ -766,14 +834,16 @@ var AdminPanel = (function() {
                     showToast('分组「' + name + '」已存在', 'warning');
                     return;
                 }
-                // We just add it to the groups list for selection
-                // It will be persisted when a bank is assigned to it
-                allGroups.push(name);
-                allGroups.sort();
-                renderGroupList();
-                updateGroupSelect();
-                showToast('分组「' + name + '」已添加', 'success');
-                newGroupInput.value = '';
+                QuizDB.saveGroupDef(name).then(function() {
+                    persistedGroupDefs.push(name);
+                    rebuildGroupState();
+                    renderGroupList();
+                    updateGroupSelect();
+                    showToast('分组「' + name + '」已添加', 'success');
+                    newGroupInput.value = '';
+                }).catch(function(e) {
+                    showAdminError('保存分组失败', e);
+                });
             });
             newGroupInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
