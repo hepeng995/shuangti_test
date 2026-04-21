@@ -143,6 +143,11 @@ var QuizDB = (function() {
             if (isQuestionHeading(line)) {
                 if (current) blocks.push(current);
                 current = { headerLine: line, bodyLines: [] };
+            } else if (isSectionHeading(line)) {
+                if (current) {
+                    blocks.push(current);
+                    current = null;
+                }
             } else if (current) {
                 current.bodyLines.push(line);
             }
@@ -155,6 +160,10 @@ var QuizDB = (function() {
     function isQuestionHeading(line) {
         return /^(##|###)\s+\d+[.、]\s*/.test(line) ||
             /^###\s+题目[一二三四五六七八九十]+[：:]\s*/.test(line);
+    }
+
+    function isSectionHeading(line) {
+        return /^#{1,6}\s+/.test(line) && !isQuestionHeading(line);
     }
 
     function parseQuestionHeading(line) {
