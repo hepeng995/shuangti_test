@@ -94,46 +94,326 @@ var QuizDB = (function() {
         });
     }
 
+    // ===== Shared Markdown parser =====
+    function parseBankQuestions(md) {
+        var blocks = splitQuestionBlocks(md);
+        var usedIds = {};
+        var nextAutoId = 1;
+        var questions = [];
+
+        for (var i = 0; i < blocks.length; i++) {
+            var block = blocks[i];
+            var header = parseQuestionHeading(block.headerLine);
+            if (!header) continue;
+
+            var assigned = assignQuestionId(header.explicitId, usedIds, nextAutoId);
+            nextAutoId = assigned.nextAutoId;
+
+            var parsed = parseQuestionBody(header.title, block.bodyLines);
+            var normalized = normalizeQuestionAnswer(parsed.answer, parsed.explanation);
+            var type = detectQuestionType(parsed.text, parsed.options, normalized.answer);
+
+            questions.push({
+                id: assigned.id,
+                type: type,
+                text: parsed.text,
+                options: parsed.options.length ? parsed.options : null,
+                answer: normalized.answer,
+                explanation: normalized.explanation
+            });
+        }
+
+        return questions;
+    }
+
+    function splitQuestionBlocks(md) {
+        var lines = String(md || '').replace(/\r\n?/g, '\n').split('\n');
+        var blocks = [];
+        var current = null;
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (isQuestionHeading(line)) {
+                if (current) blocks.push(current);
+                current = { headerLine: line, bodyLines: [] };
+            } else if (current) {
+                current.bodyLines.push(line);
+            }
+        }
+
+        if (current) blocks.push(current);
+        return blocks;
+    }
+
+    function isQuestionHeading(line) {
+        return /^(##|###)\s+\d+[.、]\s*/.test(line) ||
+            /^###\s+题目[一二三四五六七八九十]+[：:]\s*/.test(line);
+    }
+
+    function parseQuestionHeading(line) {
+        var numeric = line.match(/^(##|###)\s+(\d+)[.、]\s*([\s\S]*)$/);
+        if (numeric) {
+            return {
+                explicitId: parseInt(numeric[2], 10),
+                title: numeric[3] ? numeric[3].trim() : ''
+            };
+        }
+
+        var named = line.match(/^###\s+题目([一二三四五六七八九十]+)[：:]\s*([\s\S]*)$/);
+        if (named) {
+            return {
+                explicitId: null,
+                title: named[2] ? named[2].trim() : ''
+            };
+        }
+
+        return null;
+    }
+
+    function assignQuestionId(preferredId, usedIds, nextAutoId) {
+        var id = preferredId;
+        if (id && !usedIds[id]) {
+            usedIds[id] = true;
+            if (id >= nextAutoId) nextAutoId = id + 1;
+            return { id: id, nextAutoId: nextAutoId };
+        }
+
+        while (usedIds[nextAutoId]) nextAutoId++;
+        usedIds[nextAutoId] = true;
+        return { id: nextAutoId, nextAutoId: nextAutoId + 1 };
+    }
+
+    function parseQuestionBody(title, lines) {
+        var questionLines = [];
+        var options = [];
+        var answerLines = [];
+        var explanationLines = [];
+        var extraAnswerSections = [];
+        var currentExtra = null;
+        var mode = 'question';
+        var inCodeFence = false;
+
+        if (title) questionLines.push(title);
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var trimmed = line.trim();
+            var genericLabel = !inCodeFence ? parseGenericBoldLabel(line) : null;
+
+            if (!inCodeFence) {
+                var labelInfo = parseSpecialLabel(line);
+                if (labelInfo) {
+                    if (currentExtra) {
+                        extraAnswerSections.push(currentExtra);
+                        currentExtra = null;
+                    }
+
+                    mode = labelInfo.type;
+                    if (mode === 'subanswer') {
+                        currentExtra = {
+                            label: labelInfo.label,
+                            lines: labelInfo.inlineContent ? [labelInfo.inlineContent] : []
+                        };
+                    } else if (mode === 'answer' && labelInfo.inlineContent) {
+                        answerLines.push(labelInfo.inlineContent);
+                    } else if (mode === 'explanation' && labelInfo.inlineContent) {
+                        explanationLines.push(labelInfo.inlineContent);
+                    }
+                    continue;
+                }
+            }
+
+            if (!inCodeFence && mode === 'subanswer' && genericLabel) {
+                if (currentExtra) {
+                    extraAnswerSections.push(currentExtra);
+                    currentExtra = null;
+                }
+                mode = 'question';
+            }
+
+            if (!inCodeFence && trimmed === '---') {
+                continue;
+            }
+
+            if (mode === 'question') {
+                var parsedOptions = parseOptionLine(line);
+                if (parsedOptions.length) {
+                    options = options.concat(parsedOptions);
+                } else {
+                    questionLines.push(line);
+                }
+            } else if (mode === 'answer') {
+                answerLines.push(line);
+            } else if (mode === 'explanation') {
+                explanationLines.push(line);
+            } else if (currentExtra) {
+                currentExtra.lines.push(line);
+            }
+
+            if (/^\s*```/.test(line)) {
+                inCodeFence = !inCodeFence;
+            }
+        }
+
+        if (currentExtra) extraAnswerSections.push(currentExtra);
+
+        return {
+            text: trimOuterBlankLines(questionLines),
+            options: options,
+            answer: buildAnswerText(answerLines, extraAnswerSections),
+            explanation: trimOuterBlankLines(explanationLines)
+        };
+    }
+
+    function parseSpecialLabel(line) {
+        var match = line.match(/^\*\*(.+?)\*\*\s*(.*)$/);
+        if (!match) return null;
+
+        var label = match[1].trim();
+        var inlineContent = match[2] ? match[2].trim() : '';
+
+        if (label === '答案：' || label === '答案:') {
+            return { type: 'answer', inlineContent: inlineContent };
+        }
+        if (label === '解析：' || label === '解析:') {
+            return { type: 'explanation', inlineContent: inlineContent };
+        }
+        if (label.indexOf('答案') !== -1) {
+            return {
+                type: 'subanswer',
+                label: normalizeSubAnswerLabel(label),
+                inlineContent: inlineContent
+            };
+        }
+
+        return null;
+    }
+
+    function parseGenericBoldLabel(line) {
+        var match = line.match(/^\*\*(.+?)\*\*\s*(.*)$/);
+        return match ? match[1].trim() : '';
+    }
+
+    function normalizeSubAnswerLabel(label) {
+        return label
+            .replace(/\s*答案[：:]?\s*$/, '')
+            .replace(/[：:]\s*$/, '')
+            .trim();
+    }
+
+    function parseOptionLine(line) {
+        if (!/^\s*-\s+/.test(line)) return [];
+
+        var body = line.replace(/^\s*-\s+/, '');
+        var markerRe = /(?:^|\s)([A-Z])[.、]\s*/g;
+        var markers = [];
+        var match;
+
+        while ((match = markerRe.exec(body)) !== null) {
+            var labelIndex = match.index;
+            if (body.charAt(labelIndex).trim() === '') {
+                labelIndex += 1;
+            }
+            markers.push({
+                label: match[1],
+                start: labelIndex,
+                textStart: markerRe.lastIndex
+            });
+        }
+
+        if (!markers.length || markers[0].start !== 0) return [];
+
+        var options = [];
+        for (var i = 0; i < markers.length; i++) {
+            var current = markers[i];
+            var next = markers[i + 1];
+            var text = body.substring(current.textStart, next ? next.start : body.length).trim();
+            if (!text) continue;
+            options.push({ label: current.label, text: text });
+        }
+        return options;
+    }
+
+    function buildAnswerText(answerLines, extraAnswerSections) {
+        var sections = [];
+        var mainAnswer = trimOuterBlankLines(answerLines);
+        if (mainAnswer) sections.push(mainAnswer);
+
+        for (var i = 0; i < extraAnswerSections.length; i++) {
+            var section = extraAnswerSections[i];
+            var body = trimOuterBlankLines(section.lines);
+            if (section.label && body) {
+                sections.push(section.label + '：' + '\n' + body);
+            } else if (section.label) {
+                sections.push(section.label + '：');
+            } else if (body) {
+                sections.push(body);
+            }
+        }
+
+        return sections.join('\n\n');
+    }
+
+    function trimOuterBlankLines(lines) {
+        var copy = lines.slice();
+        while (copy.length && !copy[0].trim()) copy.shift();
+        while (copy.length && !copy[copy.length - 1].trim()) copy.pop();
+        return copy.join('\n');
+    }
+
+    function normalizeQuestionAnswer(answer, explanation) {
+        var resultAnswer = String(answer || '').trim();
+        var resultExplanation = String(explanation || '').trim();
+
+        if (resultAnswer.indexOf('正确') === 0) {
+            resultExplanation = mergeExplanation(resultAnswer.substring(2).trim(), resultExplanation);
+            resultAnswer = '正确';
+        } else if (resultAnswer.indexOf('错误') === 0) {
+            resultExplanation = mergeExplanation(resultAnswer.substring(2).trim(), resultExplanation);
+            resultAnswer = '错误';
+        }
+
+        return {
+            answer: resultAnswer,
+            explanation: resultExplanation
+        };
+    }
+
+    function mergeExplanation(extra, explanation) {
+        var prefix = String(extra || '').trim();
+        var suffix = String(explanation || '').trim();
+        if (!prefix) return suffix;
+        if (!suffix) return prefix;
+        return prefix + '\n' + suffix;
+    }
+
+    function detectQuestionType(questionText, options, answer) {
+        if (options.length > 0) {
+            return (/^[A-Z]{2,}$/.test(answer)) ? 'multiple' : 'single';
+        }
+        if (/^(正确|错误)$/.test(answer)) {
+            return 'tf';
+        }
+        if (/_{3,}/.test(questionText)) {
+            return 'fill';
+        }
+        if (answer.length > 200) {
+            return 'analysis';
+        }
+        return 'short';
+    }
+
     // ===== Compute type stats from markdown =====
     function computeTypeStats(md) {
         var types = { single: 0, multiple: 0, tf: 0, fill: 0, short: 0, analysis: 0 };
-        var total = 0;
-        var blocks = md.split(/\n(?=## \d+[.、])/);
-        for (var i = 0; i < blocks.length; i++) {
-            var b = blocks[i].trim();
-            if (!b) continue;
-            var hm = b.match(/^## (\d+)[.、]\s*([\s\S]*)/);
-            if (!hm) continue;
-            total++;
-            var content = hm[2];
-            var opts = [];
-            var orx = /^- ([A-Z])[.、]\s*(.*)/gm;
-            var om;
-            while ((om = orx.exec(content)) !== null) { opts.push(om[1]); }
-            var am = content.match(/\*\*答案[：:]\*\*\s*([\s\S]*?)(?=\n\*\*解析|$)/);
-            var ans = am ? am[1].trim() : '';
-            var qt = content;
-            var cutOpt = qt.search(/\n- [A-Z]/);
-            var cutAns = qt.search(/\*\*答案/);
-            var cut = qt.length;
-            if (cutOpt > -1) cut = Math.min(cut, cutOpt);
-            if (cutAns > -1) cut = Math.min(cut, cutAns);
-            qt = qt.substring(0, cut).trim();
-            var type;
-            if (opts.length > 0) {
-                type = (/^[A-Z]{2,}$/.test(ans)) ? 'multiple' : 'single';
-            } else if (/^(正确|错误)$/.test(ans)) {
-                type = 'tf';
-            } else if (/_{3,}/.test(qt)) {
-                type = 'fill';
-            } else if (ans.length > 200) {
-                type = 'analysis';
-            } else {
-                type = 'short';
-            }
+        var questions = parseBankQuestions(md);
+
+        for (var i = 0; i < questions.length; i++) {
+            var type = questions[i].type || 'short';
             types[type] = (types[type] || 0) + 1;
         }
-        return { total: total, types: types };
+
+        return { total: questions.length, types: types };
     }
 
     // ===== Bank queries (merge builtin + custom + meta overrides) =====
@@ -311,6 +591,7 @@ var QuizDB = (function() {
         getProgress: getProgress,
         saveProgress: saveProgress,
         deleteProgress: deleteProgress,
+        parseBankQuestions: parseBankQuestions,
         computeTypeStats: computeTypeStats,
         saveCustomBank: saveCustomBank,
         getCustomBank: getCustomBank,

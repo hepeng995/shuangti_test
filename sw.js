@@ -1,4 +1,4 @@
-var CACHE_NAME = 'quiz-platform-v5';
+var CACHE_NAME = 'quiz-platform-v6';
 var CACHE_FILES = [
   './',
   './index.html',
@@ -9,7 +9,8 @@ var CACHE_FILES = [
   './quiz-core.js',
   './quiz-select.js',
   './admin.js',
-  './bank-java.js'
+  './bank-java.js',
+  './bank-database.js'
 ];
 
 self.addEventListener('install', function(event) {

@@ -287,7 +287,7 @@ var AdminPanel = (function() {
     function handleMdFile(content, fileName) {
         var stats = QuizDB.computeTypeStats(content);
         if (stats.total === 0) {
-            showToast('未能识别出有效题目，请确保文件使用 Markdown 格式，每题以 "## 数字." 开头', 'error', 5000);
+            showToast('未能识别出有效题目，请确保每题使用 "##/### 数字." 或 "### 题目一：" 这类标题', 'error', 5000);
             return;
         }
         pendingUpload = { mdContent: content, stats: stats, fileName: fileName, meta: null };

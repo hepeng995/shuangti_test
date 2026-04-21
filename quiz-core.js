@@ -18,6 +18,8 @@ var BADGE_CLASS = {
     fill: 'type-fill', short: 'type-short', analysis: 'type-analysis'
 };
 var SCORABLE = ['single', 'multiple', 'tf'];
+var QUESTION_TYPE_FILTERS = ['single', 'multiple', 'tf', 'fill', 'short', 'analysis'];
+var ALWAYS_VISIBLE_FILTERS = ['all', 'wrong', 'bookmarked'];
 
 // ===== State =====
 var quizData = [];
@@ -67,7 +69,7 @@ var state = {
     redoQuestionIds: new Set(),
     savedSnapshot: null,
     bookmarked: new Set(),
-    shuffleOrder: null,  // null = original order; { [qId]: [2,0,3,1] } after restart
+    shuffleOrder: null,  // null = original order; { [qId]: [2,0,3,1] } after shuffle normalization
 };
 
 // ===== DOM Cache =====
@@ -141,14 +143,78 @@ function shuffleArray(arr) {
     return copy;
 }
 
+function isShuffleableQuestion(q) {
+    return !!(q &&
+        (q.type === 'single' || q.type === 'multiple') &&
+        q.options &&
+        q.options.length > 1);
+}
+
+function createShuffleOrderForQuestion(q) {
+    var indices = [];
+    for (var i = 0; i < q.options.length; i++) indices.push(i);
+    return shuffleArray(indices);
+}
+
+function isValidShuffleOrder(order, optionCount) {
+    if (!Array.isArray(order) || order.length !== optionCount) return false;
+    var seen = {};
+    for (var i = 0; i < order.length; i++) {
+        var idx = order[i];
+        if (typeof idx !== 'number' || idx !== Math.floor(idx)) return false;
+        if (idx < 0 || idx >= optionCount || seen[idx]) return false;
+        seen[idx] = true;
+    }
+    return true;
+}
+
+function normalizeShuffleOrders(existingOrders) {
+    var source = null;
+    var normalized = {};
+    var hasShuffleable = false;
+    var changed = false;
+
+    if (existingOrders && typeof existingOrders === 'object' && !Array.isArray(existingOrders)) {
+        source = existingOrders;
+    } else if (existingOrders !== undefined && existingOrders !== null) {
+        changed = true;
+    }
+
+    quizData.forEach(function(q) {
+        if (!isShuffleableQuestion(q)) return;
+        hasShuffleable = true;
+
+        var existing = source ? source[q.id] : null;
+        if (isValidShuffleOrder(existing, q.options.length)) {
+            normalized[q.id] = existing.slice();
+        } else {
+            normalized[q.id] = createShuffleOrderForQuestion(q);
+            changed = true;
+        }
+    });
+
+    if (source) {
+        for (var key in source) {
+            if (source.hasOwnProperty(key) && !normalized.hasOwnProperty(key)) {
+                changed = true;
+                break;
+            }
+        }
+    } else if (hasShuffleable) {
+        changed = true;
+    }
+
+    return {
+        orders: hasShuffleable ? normalized : null,
+        changed: changed
+    };
+}
+
 function generateShuffleOrders() {
     var orders = {};
     quizData.forEach(function(q) {
-        if (q.type !== 'single' && q.type !== 'multiple') return;
-        if (!q.options || q.options.length <= 1) return;
-        var indices = [];
-        for (var i = 0; i < q.options.length; i++) indices.push(i);
-        orders[q.id] = shuffleArray(indices);
+        if (!isShuffleableQuestion(q)) return;
+        orders[q.id] = createShuffleOrderForQuestion(q);
     });
     return orders;
 }
@@ -211,62 +277,7 @@ function showConfirm(message, onConfirm) {
 
 // ===== Parser =====
 function parseQuestions(md) {
-    var qs = [];
-    var blocks = md.split(/\n(?=## \d+[.、])/);
-    for (var i = 0; i < blocks.length; i++) {
-        var b = blocks[i].trim();
-        if (!b) continue;
-        var hm = b.match(/^## (\d+)[.、]\s*([\s\S]*)/);
-        if (!hm) continue;
-        var num = parseInt(hm[1]);
-        var content = hm[2];
-
-        // Options
-        var opts = [];
-        var orx = /^- ([A-Z])[.、]\s*(.*)/gm;
-        var om;
-        while ((om = orx.exec(content)) !== null) {
-            opts.push({ label: om[1], text: om[2].trim() });
-        }
-
-        // Answer
-        var am = content.match(/\*\*答案[：:]\*\*\s*([\s\S]*?)(?=\n\*\*解析|$)/);
-        var ans = am ? am[1].trim() : '';
-
-        // Explanation
-        var em = content.match(/\*\*解析[：:]\*\*\s*([\s\S]*)/);
-        var expl = em ? em[1].trim() : '';
-
-        // Question text
-        var qt = content;
-        var cutOpt = qt.search(/\n- [A-Z]/);
-        var cutAns = qt.search(/\*\*答案/);
-        var cut = qt.length;
-        if (cutOpt > -1) cut = Math.min(cut, cutOpt);
-        if (cutAns > -1) cut = Math.min(cut, cutAns);
-        qt = qt.substring(0, cut).trim();
-
-        // Type detection
-        var type;
-        if (opts.length > 0) {
-            type = (/^[A-Z]{2,}$/.test(ans)) ? 'multiple' : 'single';
-        } else if (/^(正确|错误)$/.test(ans)) {
-            type = 'tf';
-        } else if (/_{3,}/.test(qt)) {
-            type = 'fill';
-        } else if (ans.length > 200) {
-            type = 'analysis';
-        } else {
-            type = 'short';
-        }
-
-        qs.push({
-            id: num, type: type, text: qt,
-            options: opts.length > 0 ? opts : null,
-            answer: ans, explanation: expl
-        });
-    }
-    return qs;
+    return QuizDB.parseBankQuestions(md);
 }
 // Expose parseQuestions globally
 window.parseQuestions = parseQuestions;
@@ -277,6 +288,48 @@ window.esc = esc;
 // ===== Helpers =====
 function invalidateFilterCache() {
     _filteredCache = null;
+}
+
+function isQuestionTypeFilter(filter) {
+    return QUESTION_TYPE_FILTERS.indexOf(filter) !== -1;
+}
+
+function isAlwaysVisibleFilter(filter) {
+    return ALWAYS_VISIBLE_FILTERS.indexOf(filter) !== -1;
+}
+
+function getAvailableFilterMap() {
+    var available = { all: true, wrong: true, bookmarked: true };
+    for (var i = 0; i < quizData.length; i++) {
+        if (isQuestionTypeFilter(quizData[i].type)) {
+            available[quizData[i].type] = true;
+        }
+    }
+    return available;
+}
+
+function normalizeFilterForCurrentBank(filter) {
+    if (!filter) return 'all';
+    if (isAlwaysVisibleFilter(filter)) return filter;
+    return getAvailableFilterMap()[filter] ? filter : 'all';
+}
+
+function syncFilterTabs() {
+    if (!dom.filters) return;
+
+    var available = getAvailableFilterMap();
+    var activeFilter = state.redoMode ? 'wrong' : normalizeFilterForCurrentBank(state.filter);
+    if (!state.redoMode) state.filter = activeFilter;
+
+    dom.filters.querySelectorAll('button[data-filter]').forEach(function(btn) {
+        var filter = btn.dataset.filter;
+        var shouldHide = isQuestionTypeFilter(filter) && !available[filter];
+        var isActive = !shouldHide && filter === activeFilter;
+
+        btn.hidden = shouldHide;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
 }
 
 function getFiltered() {
@@ -810,11 +863,7 @@ function enterRedoMode() {
     });
 
     state.currentIndex = 0;
-
-    dom.filters.querySelectorAll('button').forEach(function(btn) {
-        btn.classList.remove('active');
-        if (btn.dataset.filter === 'wrong') btn.classList.add('active');
-    });
+    syncFilterTabs();
 
     if (dom.searchInput) {
         dom.searchInput.disabled = true;
@@ -870,10 +919,7 @@ function exitRedoMode(mergeResults) {
     state.currentIndex = 0;
     state.filter = 'all';
     invalidateFilterCache();
-
-    dom.filters.querySelectorAll('button').forEach(function(btn) {
-        btn.classList.toggle('active', btn.dataset.filter === 'all');
-    });
+    syncFilterTabs();
     if (dom.searchInput) dom.searchInput.disabled = false;
 
     hideRedoBanner();
@@ -974,11 +1020,9 @@ function setFilter(f) {
         exitRedoMode(true);
     }
     invalidateFilterCache();
-    state.filter = f;
+    state.filter = normalizeFilterForCurrentBank(f);
     state.currentIndex = 0;
-    dom.filters.querySelectorAll('button').forEach(function(btn) {
-        btn.classList.toggle('active', btn.dataset.filter === f);
-    });
+    syncFilterTabs();
     renderGrid();
     renderQuestion();
     saveState();
@@ -1034,9 +1078,7 @@ function restart() {
         state.currentIndex = 0;
         state.filter = 'all';
         state.shuffleOrder = generateShuffleOrders();
-        dom.filters.querySelectorAll('button').forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.filter === 'all');
-        });
+        syncFilterTabs();
         renderGrid();
         renderQuestion();
         updateStats();
@@ -1100,11 +1142,10 @@ function importProgress(file) {
                 state.redoMode = false;
                 state.redoQuestionIds = new Set();
                 state.savedSnapshot = null;
-                state.shuffleOrder = d.shuffleOrder || null;
+                state.shuffleOrder = normalizeShuffleOrders(d.shuffleOrder).orders;
+                state.filter = normalizeFilterForCurrentBank(state.filter);
                 applyTheme();
-                dom.filters.querySelectorAll('button').forEach(function(btn) {
-                    btn.classList.toggle('active', btn.dataset.filter === state.filter);
-                });
+                syncFilterTabs();
                 hideRedoBanner();
                 renderGrid();
                 renderQuestion();
@@ -1564,10 +1605,12 @@ function initQuizPage(bankId) {
         // Update stat total
         var statTotal = document.getElementById('stat-total');
         if (statTotal) statTotal.textContent = quizData.length;
+        syncFilterTabs();
 
         // Load progress from IndexedDB
         QuizDB.getProgress(bankId).then(function(prog) {
             if (myGeneration !== _initGeneration) return; // stale callback
+            var shuffleState = null;
             if (prog) {
                 state.currentIndex = prog.currentIndex || 0;
                 state.answers = prog.answers || {};
@@ -1594,7 +1637,10 @@ function initQuizPage(bankId) {
                 state.theme = localStorage.getItem('quiz_theme') || 'light';
                 state.shuffleOrder = null;
             }
+            shuffleState = normalizeShuffleOrders(state.shuffleOrder);
+            state.shuffleOrder = shuffleState.orders;
             _stateLoaded = true;
+            state.filter = normalizeFilterForCurrentBank(state.filter);
 
             applyTheme();
 
@@ -1607,18 +1653,13 @@ function initQuizPage(bankId) {
                 }
             }
 
-            dom.filters.querySelectorAll('button').forEach(function(btn) {
-                if (state.redoMode) {
-                    btn.classList.toggle('active', btn.dataset.filter === 'wrong');
-                } else {
-                    btn.classList.toggle('active', btn.dataset.filter === state.filter);
-                }
-            });
+            syncFilterTabs();
 
             renderGrid();
             renderQuestion();
             updateStats();
             bindEvents();
+            if (shuffleState && shuffleState.changed) saveState();
         });
     }).catch(function(e) {
         console.error('initQuizPage:', e);
