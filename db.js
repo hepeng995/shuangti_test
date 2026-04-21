@@ -559,14 +559,19 @@ var QuizDB = (function() {
     // ===== Bank Meta Overrides (for builtin banks) =====
     function saveBankMeta(bankId, meta) {
         return new Promise(function(resolve, reject) {
-            var data = { bankId: bankId };
-            for (var k in meta) {
-                if (HAS_OWN.call(meta, k)) data[k] = meta[k];
-            }
-            var req = db.transaction(STORE_BANK_META, 'readwrite')
-                .objectStore(STORE_BANK_META).put(data);
-            req.onsuccess = function() { resolve(); };
-            req.onerror = function(e) { reject(e.target.error); };
+            var tx = db.transaction(STORE_BANK_META, 'readwrite');
+            var store = tx.objectStore(STORE_BANK_META);
+            var getReq = store.get(bankId);
+            getReq.onsuccess = function(e) {
+                var data = e.target.result || { bankId: bankId };
+                for (var k in meta) {
+                    if (HAS_OWN.call(meta, k)) data[k] = meta[k];
+                }
+                var putReq = store.put(data);
+                putReq.onsuccess = function() { resolve(); };
+                putReq.onerror = function(err) { reject(err.target.error); };
+            };
+            getReq.onerror = function(e) { reject(e.target.error); };
         });
     }
 
@@ -588,45 +593,6 @@ var QuizDB = (function() {
         });
     }
 
-    function listGroupDefs() {
-        return new Promise(function(resolve, reject) {
-            var req = db.transaction(STORE_GROUP_DEFS, 'readonly')
-                .objectStore(STORE_GROUP_DEFS).getAll();
-            req.onsuccess = function(e) {
-                var rows = e.target.result || [];
-                var names = [];
-                for (var i = 0; i < rows.length; i++) {
-                    if (rows[i] && typeof rows[i].name === 'string') names.push(rows[i].name);
-                }
-                resolve(names);
-            };
-            req.onerror = function(e) { reject(e.target.error); };
-        });
-    }
-
-    function saveGroupDef(name) {
-        return new Promise(function(resolve, reject) {
-            var groupName = String(name || '').trim();
-            if (!groupName) {
-                reject(new Error('分组名称不能为空'));
-                return;
-            }
-            var req = db.transaction(STORE_GROUP_DEFS, 'readwrite')
-                .objectStore(STORE_GROUP_DEFS).put({ name: groupName });
-            req.onsuccess = function() { resolve(); };
-            req.onerror = function(e) { reject(e.target.error); };
-        });
-    }
-
-    function deleteGroupDef(name) {
-        return new Promise(function(resolve, reject) {
-            var req = db.transaction(STORE_GROUP_DEFS, 'readwrite')
-                .objectStore(STORE_GROUP_DEFS).delete(name);
-            req.onsuccess = function() { resolve(); };
-            req.onerror = function(e) { reject(e.target.error); };
-        });
-    }
-
     return {
         init: init,
         registerBank: registerBank,
@@ -642,10 +608,7 @@ var QuizDB = (function() {
         listCustomBanks: listCustomBanks,
         deleteCustomBank: deleteCustomBank,
         saveBankMeta: saveBankMeta,
-        getBankMeta: getBankMeta,
-        listGroupDefs: listGroupDefs,
-        saveGroupDef: saveGroupDef,
-        deleteGroupDef: deleteGroupDef
+        getBankMeta: getBankMeta
     };
 })();
 

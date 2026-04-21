@@ -10,19 +10,13 @@ var AdminPanel = (function() {
     var uploadNameInput = null;
     var uploadDescInput = null;
     var uploadIconInput = null;
-    var uploadGroupSelect = null;
     var uploadPreview = null;
     var uploadConfirmBtn = null;
     var uploadCancelBtn = null;
     var bankListEl = null;
-    var groupListEl = null;
-    var newGroupInput = null;
-    var addGroupBtn = null;
 
     // ===== State =====
     var allBanks = [];
-    var allGroups = [];
-    var persistedGroupDefs = [];
     var pendingUpload = null;
     var editingBankId = null;
 
@@ -52,65 +46,9 @@ var AdminPanel = (function() {
         return id;
     }
 
-    function addUniqueGroup(list, groupName) {
-        var normalized = groupName || '其他';
-        if (list.indexOf(normalized) === -1) list.push(normalized);
-    }
-
-    function rebuildGroupState() {
-        allGroups = [];
-        for (var i = 0; i < persistedGroupDefs.length; i++) {
-            addUniqueGroup(allGroups, persistedGroupDefs[i]);
-        }
-        for (var j = 0; j < allBanks.length; j++) {
-            addUniqueGroup(allGroups, allBanks[j].group || '其他');
-        }
-        allGroups.sort();
-    }
-
-    function isPersistedStandaloneGroup(groupName) {
-        return persistedGroupDefs.indexOf(groupName) !== -1;
-    }
-
-    function applyGroupSelectOptions(selectEl, current, includeBlank) {
-        if (!selectEl) return;
-        var currentValue = current || '';
-        selectEl.innerHTML = includeBlank ? '<option value="">-- 选择分组 --</option>' : '';
-        for (var i = 0; i < allGroups.length; i++) {
-            var opt = document.createElement('option');
-            opt.value = allGroups[i];
-            opt.textContent = allGroups[i];
-            if (allGroups[i] === currentValue) opt.selected = true;
-            selectEl.appendChild(opt);
-        }
-        var newOpt = document.createElement('option');
-        newOpt.value = '__new__';
-        newOpt.textContent = '+ 新建分组';
-        selectEl.appendChild(newOpt);
-        selectEl.dataset.previousValue = currentValue;
-        if (currentValue) {
-            selectEl.value = currentValue;
-        } else if (includeBlank) {
-            selectEl.value = '';
-        }
-    }
-
     function showAdminError(prefix, err) {
         var msg = (err && err.message) ? err.message : '未知错误';
         showToast(prefix + ': ' + msg, 'error', 5000);
-    }
-
-    function bindGroupSelectNewOption(selectEl, fallbackValue, includeBlank) {
-        if (!selectEl || selectEl.dataset.newGroupBound === '1') return;
-        selectEl.dataset.previousValue = fallbackValue || '';
-        selectEl.dataset.newGroupBound = '1';
-        selectEl.addEventListener('change', function() {
-            if (selectEl.value === '__new__') {
-                handleGroupNewOption(selectEl, selectEl.dataset.previousValue || fallbackValue || '', includeBlank);
-            } else {
-                selectEl.dataset.previousValue = selectEl.value;
-            }
-        });
     }
 
     // SHA-256 hash helper (uses Web Crypto API, async)
@@ -218,7 +156,7 @@ var AdminPanel = (function() {
         var headerActions = document.querySelector('.header-actions');
         if (headerLeft) {
             headerLeft.innerHTML = '<h1>管理员面板</h1>' +
-                '<span class="header-subtitle">管理题库和分组标签</span>';
+                '<span class="header-subtitle">管理题库</span>';
         }
         if (headerStats) headerStats.style.display = 'none';
         if (headerActions) {
@@ -266,18 +204,11 @@ var AdminPanel = (function() {
     // ===== Data Loading =====
     function loadAndRender() {
         showBankListSkeleton();
-        QuizDB.listGroupDefs().then(function(groupDefs) {
-            persistedGroupDefs = groupDefs || [];
-            return QuizDB.listBanks();
-        }).then(function(banks) {
+        QuizDB.listBanks().then(function(banks) {
             allBanks = banks || [];
-            rebuildGroupState();
             renderBankList();
-            renderGroupList();
-            updateGroupSelect();
         }).catch(function(e) {
             if (bankListEl) bankListEl.innerHTML = '<div class="admin-empty">加载失败</div>';
-            if (groupListEl) groupListEl.innerHTML = '<div class="admin-empty">加载失败</div>';
             showAdminError('加载管理员数据失败', e);
         });
     }
@@ -322,8 +253,6 @@ var AdminPanel = (function() {
             uploadCancelBtn.addEventListener('click', cancelUpload);
         }
 
-        // Handle "new group" in upload form select
-        if (uploadGroupSelect) bindGroupSelectNewOption(uploadGroupSelect, '', true);
     }
 
     function handleFile(file) {
@@ -374,8 +303,7 @@ var AdminPanel = (function() {
         var meta = {
             name: data.name || '',
             description: data.description || '',
-            icon: data.icon || '📚',
-            group: data.group || ''
+            icon: data.icon || '📚'
         };
         pendingUpload = { mdContent: md, stats: stats, fileName: fileName, meta: meta };
         showUploadForm();
@@ -428,7 +356,6 @@ var AdminPanel = (function() {
         if (uploadNameInput) uploadNameInput.value = meta.name || baseName;
         if (uploadDescInput) uploadDescInput.value = meta.description || ('共 ' + pendingUpload.stats.total + ' 道题');
         if (uploadIconInput) uploadIconInput.value = meta.icon || '📚';
-        updateGroupSelect();
 
         if (uploadPreview) {
             var typeNames = {
@@ -459,7 +386,6 @@ var AdminPanel = (function() {
 
         var desc = uploadDescInput ? uploadDescInput.value.trim() : '';
         var icon = uploadIconInput ? uploadIconInput.value.trim() : '📚';
-        var group = uploadGroupSelect ? uploadGroupSelect.value : '';
 
         // Loading state
         if (uploadConfirmBtn) uploadConfirmBtn.classList.add('loading');
@@ -469,7 +395,6 @@ var AdminPanel = (function() {
             name: name,
             description: desc,
             icon: icon || '📚',
-            group: group || '其他',
             source: 'custom',
             mdContent: pendingUpload.mdContent,
             questionCount: pendingUpload.stats.total,
@@ -494,39 +419,6 @@ var AdminPanel = (function() {
         if (uploadArea) uploadArea.classList.remove('hidden');
         if (uploadForm) uploadForm.classList.add('hidden');
         if (fileInput) fileInput.value = '';
-    }
-
-    // ===== Group Select =====
-    function updateGroupSelect() {
-        if (!uploadGroupSelect) return;
-        var current = uploadGroupSelect.value;
-        applyGroupSelectOptions(uploadGroupSelect, current, true);
-    }
-
-    function handleGroupNewOption(selectEl, previousValue, includeBlank) {
-        if (selectEl.value !== '__new__') return;
-        var newName = prompt('请输入新分组名称:');
-        if (newName && newName.trim()) {
-            newName = newName.trim();
-            if (allGroups.indexOf(newName) !== -1) {
-                applyGroupSelectOptions(selectEl, newName, includeBlank);
-                showToast('分组「' + newName + '」已存在', 'warning');
-                return;
-            }
-            QuizDB.saveGroupDef(newName).then(function() {
-                persistedGroupDefs.push(newName);
-                rebuildGroupState();
-                renderGroupList();
-                updateGroupSelect();
-                applyGroupSelectOptions(selectEl, newName, includeBlank);
-                showToast('分组「' + newName + '」已添加', 'success');
-            }).catch(function(e) {
-                applyGroupSelectOptions(selectEl, previousValue || '', includeBlank);
-                showAdminError('保存分组失败', e);
-            });
-        } else {
-            applyGroupSelectOptions(selectEl, previousValue || '', includeBlank);
-        }
     }
 
     // ===== Bank List =====
@@ -574,7 +466,7 @@ var AdminPanel = (function() {
                         sourceBadge +
                     '</div>' +
                     '<div class="admin-bank-desc">' + escapeHtml(bank.description || '') + '</div>' +
-                    '<div class="admin-bank-group">分组: ' + escapeHtml(bank.group || '其他') + ' · ' + (bank.questionCount || 0) + ' 题</div>' +
+                    '<div class="admin-bank-count">共 ' + (bank.questionCount || 0) + ' 题</div>' +
                     '<div class="admin-bank-types">' + typesHtml + '</div>' +
                 '</div>' +
             '</div>' +
@@ -623,7 +515,6 @@ var AdminPanel = (function() {
         }
         if (!bank) return;
 
-        var groupOptions = buildGroupOptions(bank.group || '其他');
         var form = document.createElement('div');
         form.className = 'admin-edit-form';
         form.innerHTML =
@@ -641,10 +532,6 @@ var AdminPanel = (function() {
                 '<label>描述</label>' +
                 '<input type="text" class="admin-input" id="edit-desc-' + bankId + '" value="' + escapeHtml(bank.description || '') + '">' +
             '</div>' +
-            '<div class="admin-form-group">' +
-                '<label>分组</label>' +
-                '<select class="admin-select" id="edit-group-' + bankId + '">' + groupOptions + '</select>' +
-            '</div>' +
             '<div class="admin-form-actions">' +
                 '<button class="btn-nav admin-edit-cancel">取消</button>' +
                 '<button class="btn-submit admin-edit-save">保存</button>' +
@@ -653,10 +540,6 @@ var AdminPanel = (function() {
         itemEl.innerHTML = '';
         itemEl.appendChild(form);
 
-        // Handle "new group" in edit form select
-        var editGroupSelect = document.getElementById('edit-group-' + bankId);
-        if (editGroupSelect) bindGroupSelectNewOption(editGroupSelect, bank.group || '其他', false);
-
         var saveBtn = form.querySelector('.admin-edit-save');
         var cancelBtn = form.querySelector('.admin-edit-cancel');
 
@@ -664,7 +547,6 @@ var AdminPanel = (function() {
             var newName = document.getElementById('edit-name-' + bankId).value.trim();
             var newDesc = document.getElementById('edit-desc-' + bankId).value.trim();
             var newIcon = document.getElementById('edit-icon-' + bankId).value.trim();
-            var newGroup = document.getElementById('edit-group-' + bankId).value;
 
             if (!newName) {
                 var nameInput = document.getElementById('edit-name-' + bankId);
@@ -674,8 +556,7 @@ var AdminPanel = (function() {
             saveBankMeta(bankId, bank.source === 'custom', {
                 name: newName,
                 description: newDesc,
-                icon: newIcon || '📚',
-                group: newGroup || '其他'
+                icon: newIcon || '📚'
             });
         });
 
@@ -685,17 +566,6 @@ var AdminPanel = (function() {
         });
     }
 
-    function buildGroupOptions(current) {
-        var html = '';
-        for (var i = 0; i < allGroups.length; i++) {
-            html += '<option value="' + escapeHtml(allGroups[i]) + '"' +
-                (allGroups[i] === current ? ' selected' : '') + '>' +
-                escapeHtml(allGroups[i]) + '</option>';
-        }
-        html += '<option value="__new__">+ 新建分组</option>';
-        return html;
-    }
-
     function saveBankMeta(bankId, isCustom, meta) {
         if (isCustom) {
             return QuizDB.getCustomBank(bankId).then(function(bank) {
@@ -703,7 +573,6 @@ var AdminPanel = (function() {
                 bank.name = meta.name;
                 bank.description = meta.description;
                 bank.icon = meta.icon;
-                bank.group = meta.group;
                 bank.updatedAt = new Date().toISOString();
                 return QuizDB.saveCustomBank(bank);
             }).then(function() {
@@ -724,136 +593,6 @@ var AdminPanel = (function() {
         }
     }
 
-    // ===== Group Management =====
-    function renderGroupList() {
-        if (!groupListEl) return;
-        groupListEl.innerHTML = '';
-        if (allGroups.length === 0) {
-            groupListEl.innerHTML = '<div class="admin-empty">暂无分组</div>';
-            return;
-        }
-        for (var i = 0; i < allGroups.length; i++) {
-            groupListEl.appendChild(createGroupTag(allGroups[i]));
-        }
-    }
-
-    function createGroupTag(groupName) {
-        var tag = document.createElement('div');
-        tag.className = 'admin-group-tag';
-
-        var count = 0;
-        for (var j = 0; j < allBanks.length; j++) {
-            if ((allBanks[j].group || '其他') === groupName) count++;
-        }
-
-        tag.innerHTML =
-            '<span class="admin-group-name">' + escapeHtml(groupName) + '</span>' +
-            '<span class="admin-group-count">' + count + ' 个题库</span>' +
-            '<button class="admin-group-rename" title="重命名">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-            '</button>' +
-            (count === 0 ? '<button class="admin-group-delete" title="删除空分组"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' : '');
-
-        var renameBtn = tag.querySelector('.admin-group-rename');
-        renameBtn.addEventListener('click', function() {
-            var oldName = groupName;
-            var newName = prompt('重命名分组「' + oldName + '」:', oldName);
-            if (newName && newName.trim() && newName.trim() !== oldName) {
-                renameGroup(oldName, newName.trim());
-            }
-        });
-
-        var deleteBtn = tag.querySelector('.admin-group-delete');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', function() {
-                showConfirm('确认删除', '确定删除空分组「' + groupName + '」吗？', function() {
-                    QuizDB.deleteGroupDef(groupName).then(function() {
-                        var idx = persistedGroupDefs.indexOf(groupName);
-                        if (idx !== -1) persistedGroupDefs.splice(idx, 1);
-                        rebuildGroupState();
-                        renderGroupList();
-                        updateGroupSelect();
-                        showToast('分组「' + groupName + '」已删除', 'success');
-                    }).catch(function(e) {
-                        showAdminError('删除分组失败', e);
-                    });
-                });
-            });
-        }
-
-        return tag;
-    }
-
-    function renameGroup(oldName, newName) {
-        var promises = [];
-        if (isPersistedStandaloneGroup(oldName)) {
-            promises.push(QuizDB.saveGroupDef(newName));
-            promises.push(QuizDB.deleteGroupDef(oldName));
-        }
-        for (var i = 0; i < allBanks.length; i++) {
-            var bank = allBanks[i];
-            if ((bank.group || '其他') === oldName) {
-                if (bank.source === 'custom') {
-                    promises.push(
-                        QuizDB.getCustomBank(bank.id).then(function(b) {
-                            if (b) {
-                                b.group = newName;
-                                b.updatedAt = new Date().toISOString();
-                                return QuizDB.saveCustomBank(b);
-                            }
-                        })
-                    );
-                } else {
-                    promises.push(QuizDB.saveBankMeta(bank.id, {
-                        name: bank.name,
-                        description: bank.description,
-                        icon: bank.icon,
-                        group: newName
-                    }));
-                }
-            }
-        }
-        Promise.all(promises).then(function() {
-            var oldIdx = persistedGroupDefs.indexOf(oldName);
-            if (oldIdx !== -1) persistedGroupDefs.splice(oldIdx, 1);
-            if (isPersistedStandaloneGroup(newName) === false && oldIdx !== -1) persistedGroupDefs.push(newName);
-            rebuildGroupState();
-            showToast('分组已重命名', 'success');
-            loadAndRender();
-        }).catch(function(e) {
-            showAdminError('重命名分组失败', e);
-        });
-    }
-
-    function bindGroupEvents() {
-        if (addGroupBtn && newGroupInput) {
-            addGroupBtn.addEventListener('click', function() {
-                var name = newGroupInput.value.trim();
-                if (!name) return;
-                if (allGroups.indexOf(name) !== -1) {
-                    showToast('分组「' + name + '」已存在', 'warning');
-                    return;
-                }
-                QuizDB.saveGroupDef(name).then(function() {
-                    persistedGroupDefs.push(name);
-                    rebuildGroupState();
-                    renderGroupList();
-                    updateGroupSelect();
-                    showToast('分组「' + name + '」已添加', 'success');
-                    newGroupInput.value = '';
-                }).catch(function(e) {
-                    showAdminError('保存分组失败', e);
-                });
-            });
-            newGroupInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addGroupBtn.click();
-                }
-            });
-        }
-    }
-
     // ===== Init =====
     function init() {
         adminPage = document.getElementById('admin-page');
@@ -863,17 +602,12 @@ var AdminPanel = (function() {
         uploadNameInput = document.getElementById('admin-upload-name');
         uploadDescInput = document.getElementById('admin-upload-desc');
         uploadIconInput = document.getElementById('admin-upload-icon');
-        uploadGroupSelect = document.getElementById('admin-upload-group');
         uploadPreview = document.getElementById('admin-upload-preview');
         uploadConfirmBtn = document.getElementById('admin-upload-confirm');
         uploadCancelBtn = document.getElementById('admin-upload-cancel');
         bankListEl = document.getElementById('admin-bank-list');
-        groupListEl = document.getElementById('admin-group-list');
-        newGroupInput = document.getElementById('admin-new-group-input');
-        addGroupBtn = document.getElementById('admin-add-group-btn');
 
         bindUploadEvents();
-        bindGroupEvents();
     }
 
     return {

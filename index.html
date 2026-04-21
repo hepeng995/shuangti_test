@@ -71,7 +71,6 @@
                     <span class="search-count hidden" id="bank-search-count" aria-live="polite"></span>
                 </div>
             </div>
-            <div class="bank-group-tabs" id="bank-group-tabs"></div>
         <div id="banks-container" class="banks-grid"></div>
         </div>
     </section>
@@ -172,7 +171,7 @@
         <div class="admin-container">
             <div class="admin-header">
                 <h2>管理员面板</h2>
-                <p class="admin-subtitle">管理题库和分组标签</p>
+                <p class="admin-subtitle">管理题库</p>
             </div>
 
             <div class="admin-section">
@@ -203,12 +202,6 @@
                         <input type="text" id="admin-upload-desc" class="admin-input" placeholder="输入题库描述">
                     </div>
                     <div class="admin-form-group">
-                        <label for="admin-upload-group">分组</label>
-                        <select id="admin-upload-group" class="admin-select">
-                            <option value="">-- 选择分组 --</option>
-                        </select>
-                    </div>
-                    <div class="admin-form-group">
                         <label>预览</label>
                         <div id="admin-upload-preview" class="admin-upload-preview"></div>
                     </div>
@@ -225,18 +218,6 @@
                     题单管理
                 </h3>
                 <div id="admin-bank-list" class="admin-bank-list"></div>
-            </div>
-
-            <div class="admin-section">
-                <h3 class="admin-section-title">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                    分组标签
-                </h3>
-                <div id="admin-group-list" class="admin-group-list"></div>
-                <div class="admin-group-add">
-                    <input type="text" id="admin-new-group-input" class="admin-input" placeholder="输入新分组名称...">
-                    <button class="btn-submit" id="admin-add-group-btn">添加</button>
-                </div>
             </div>
         </div>
     </section>

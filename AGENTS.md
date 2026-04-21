@@ -19,8 +19,8 @@ index.html      — 页面骨架（header + select/quiz/admin 三页区 + 4 个 
 db.js           — IndexedDB 数据访问层（题库注册、进度 CRUD、自定义题库、localStorage 迁移）
 router.js       — Hash-based SPA 路由：#/（选题库）、#/quiz/{bankId}（答题）、#/admin（管理）
 quiz-core.js    — 核心答题逻辑（解析器、状态管理、渲染、事件、持久化）— 匿名 IIFE，暴露有限全局接口
-quiz-select.js  — 题库选择页（搜索、分组标签、卡片渲染、进度展示）
-admin.js        — 管理面板（SHA-256+salt 密码认证、题库上传 MD/JSON、行内编辑、分组管理）
+quiz-select.js  — 题库选择页（搜索、卡片渲染、进度展示）
+admin.js        — 管理面板（SHA-256+salt 密码认证、题库上传 MD/JSON、行内编辑）
 bank-java.js    — 内置 Java 题库数据（194 题，调用 registerBank() 注册）
 style.css       — 完整设计系统（~90 CSS 变量，明暗双主题，三档响应式）
 sw.js           — Service Worker（cache-first 本地资源 + stale-while-revalidate Google Fonts）
@@ -81,7 +81,7 @@ tiku/*.md       — 题目源数据（Markdown 格式，仅作参考，运行时
 
 ### 添加新题库
 
-1. 创建新的 `bank-xxx.js` 文件，调用 `QuizDB.registerBank({ id, name, group, mdContent })` 注册
+1. 创建新的 `bank-xxx.js` 文件，调用 `QuizDB.registerBank({ id, name, mdContent })` 注册
 2. 在 `index.html` 中 `bank-java.js` 之后添加 `<script src="bank-xxx.js"></script>`
 3. 更新 `sw.js` 的 `CACHE_FILES` 数组
 4. 递增 `sw.js` 中的缓存名

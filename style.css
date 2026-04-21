@@ -264,11 +264,6 @@
 [data-theme="dark"] .bank-card:hover .type-chip { border-color: var(--accent-subtle); background: var(--accent-light); color: var(--accent); }
 } /* end @media (hover: hover) */
 [data-theme="dark"] .badge-builtin { background: var(--accent-light); color: var(--accent); border-color: var(--accent-subtle); }
-[data-theme="dark"] .bank-group-tab { background: var(--bg-secondary); border-color: var(--border); color: var(--text-muted); }
-[data-theme="dark"] .bank-group-tab:hover { color: var(--accent); border-color: var(--accent); }
-[data-theme="dark"] .bank-group-tab.active { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
-[data-theme="dark"] .bank-group-title h3 { color: var(--text-primary); }
-[data-theme="dark"] .bank-group-line { background: var(--border); }
 [data-theme="dark"] .progress-bar-fill::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent); }
 [data-theme="dark"] .skeleton-icon,
 [data-theme="dark"] .skeleton-line,
@@ -1969,72 +1964,6 @@ kbd {
         padding: 11px 56px 11px 38px;
         font-size: 16px; /* prevent iOS zoom */
     }
-    .bank-group-tabs {
-        overflow-x: auto;
-        flex-wrap: nowrap;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-    }
-    .bank-group-tabs::-webkit-scrollbar { display: none; }
-    .bank-group-tab { flex-shrink: 0; }
-}
-
-/* ===== Bank Group Tabs ===== */
-.bank-group-tabs {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-.bank-group-tabs.hidden { display: none; }
-.bank-group-tab {
-    padding: 6px 16px;
-    border-radius: var(--radius-full);
-    font-size: 0.85rem;
-    font-weight: 500;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-.bank-group-tab:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-    transform: translateY(-1px);
-}
-.bank-group-tab.active {
-    background: var(--accent);
-    color: var(--text-on-accent);
-    border-color: var(--accent);
-    box-shadow: var(--shadow-accent), var(--glow-accent);
-    font-weight: 600;
-}
-
-/* ===== Bank Group Title ===== */
-.bank-group-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    grid-column: 1 / -1;
-    padding-top: 8px;
-}
-.bank-group-title h3 {
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    white-space: nowrap;
-    margin: 0;
-}
-.bank-group-line {
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-}
-.bank-group-count {
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    white-space: nowrap;
 }
 
 /* ===== Skeleton Loading ===== */
@@ -2425,7 +2354,7 @@ kbd {
     white-space: nowrap;
 }
 
-.admin-bank-group {
+.admin-bank-count {
     font-size: 0.78rem;
     color: var(--text-muted);
     margin-bottom: 6px;
@@ -2481,71 +2410,6 @@ kbd {
 
 .admin-edit-form .admin-form-group {
     margin-bottom: 12px;
-}
-
-/* Group management */
-.admin-group-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 16px;
-}
-
-.admin-group-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    border-radius: var(--radius-full);
-    background: var(--accent-light);
-    border: 1px solid rgba(37, 99, 235, 0.15);
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.admin-group-name {
-    font-weight: 600;
-    color: var(--accent);
-    font-size: 0.88rem;
-}
-
-.admin-group-count {
-    color: var(--text-muted);
-    font-size: 0.72rem;
-}
-
-.admin-group-rename,
-.admin-group-delete {
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
-    flex-shrink: 0;
-}
-
-.admin-group-rename:hover {
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--accent);
-}
-
-.admin-group-delete:hover {
-    background: var(--incorrect-bg);
-    color: var(--incorrect);
-}
-
-.admin-group-add {
-    display: flex;
-    gap: 8px;
-}
-
-.admin-group-add .admin-input {
-    max-width: 240px;
 }
 
 .admin-empty {
@@ -2617,11 +2481,6 @@ kbd {
     border-color: var(--border);
 }
 
-[data-theme="dark"] .admin-group-tag {
-    background: var(--accent-light);
-    border-color: rgba(129, 140, 248, 0.2);
-}
-
 [data-theme="dark"] .admin-badge-builtin {
     background: var(--accent-light);
     color: var(--accent);
@@ -2648,11 +2507,6 @@ kbd {
 [data-theme="dark"] .admin-select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-subtle);
-}
-
-[data-theme="dark"] .admin-group-rename:hover {
-    background: rgba(129, 140, 248, 0.15);
-    color: var(--accent);
 }
 
 /* ===== Admin Responsive ===== */
@@ -2683,17 +2537,6 @@ kbd {
         width: 100%;
     }
 
-    .admin-group-add {
-        flex-direction: column;
-    }
-
-    .admin-group-add .admin-input {
-        max-width: 100%;
-    }
-
-    .admin-group-add .btn-submit {
-        width: 100%;
-    }
 }
 
 @media (max-width: 640px) {
@@ -2842,7 +2685,7 @@ kbd {
 }
 .admin-bank-skeleton .admin-bank-name,
 .admin-bank-skeleton .admin-bank-desc,
-.admin-bank-skeleton .admin-bank-group,
+.admin-bank-skeleton .admin-bank-count,
 .admin-bank-skeleton .type-chip {
     color: transparent;
     background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--bg-hover) 50%, var(--surface-sunken) 75%);

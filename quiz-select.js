@@ -17,81 +17,12 @@ var QuizSelect = (function() {
     var bankSearchQuery = '';
     var allBanks = [];
     var bankSearchTimer = null;
-    var bankGroupTabs = null;
-    var bankGroupFilter = '';
 
-    // ===== Utility =====
-    // Use shared esc() from quiz-core.js when available, fallback to DOM-based method
     var escapeHtml = (typeof esc === 'function') ? esc : function(str) {
         var d = document.createElement('div');
         d.textContent = str;
         return d.innerHTML;
     };
-
-    // ===== Group helpers =====
-
-    // Get unique group names from bank list
-    function getUniqueGroups() {
-        var groups = [];
-        for (var i = 0; i < allBanks.length; i++) {
-            var g = allBanks[i].group || '';
-            if (!g) g = '其他';
-            if (groups.indexOf(g) === -1) groups.push(g);
-        }
-        groups.sort();
-        return groups;
-    }
-
-    // Render group tab buttons
-    function renderGroupTabs(groups) {
-        if (!bankGroupTabs) return;
-
-        // 0 or 1 group → hide tabs entirely
-        if (groups.length <= 1) {
-            bankGroupTabs.classList.add('hidden');
-            return;
-        }
-
-        bankGroupTabs.classList.remove('hidden');
-        bankGroupTabs.innerHTML = '';
-
-        // "全部" tab
-        var allTab = document.createElement('button');
-        allTab.className = 'bank-group-tab' + (bankGroupFilter === '' ? ' active' : '');
-        allTab.textContent = '全部';
-        allTab.setAttribute('data-group', '');
-        allTab.addEventListener('click', function() {
-            bankGroupFilter = '';
-            filterAndRenderBanks();
-        });
-        bankGroupTabs.appendChild(allTab);
-
-        // One tab per group
-        for (var i = 0; i < groups.length; i++) {
-            var tab = document.createElement('button');
-            tab.className = 'bank-group-tab' + (bankGroupFilter === groups[i] ? ' active' : '');
-            tab.textContent = groups[i];
-            tab.setAttribute('data-group', groups[i]);
-            tab.addEventListener('click', function() {
-                bankGroupFilter = this.getAttribute('data-group');
-                filterAndRenderBanks();
-            });
-            bankGroupTabs.appendChild(tab);
-        }
-    }
-
-    // Create group title element
-    function createGroupTitle(groupName, count, questionCount) {
-        var el = document.createElement('div');
-        el.className = 'bank-group-title';
-        el.innerHTML =
-            '<h3>' + escapeHtml(groupName) + '</h3>' +
-            '<span class="bank-group-count">' + count + ' 个题库' + (questionCount > 0 ? ' · ' + questionCount + ' 题' : '') + '</span>' +
-            '<div class="bank-group-line"></div>';
-        return el;
-    }
-
-    // ===== Page switching =====
 
     function showSelectPage() {
         var quizPage = document.getElementById('quiz-page');
@@ -128,8 +59,6 @@ var QuizSelect = (function() {
         }
     }
 
-    // ===== Data loading =====
-
     function loadBankProgress(bankId) {
         return QuizDB.getProgress(bankId).then(function(prog) {
             if (!prog) return { answered: 0, total: 0, pct: 0 };
@@ -139,7 +68,6 @@ var QuizSelect = (function() {
                 if (answers.hasOwnProperty(k)) answered++;
             }
             var total = 0;
-            // Find bank to get questionCount
             for (var i = 0; i < allBanks.length; i++) {
                 if (allBanks[i].id === bankId) {
                     total = allBanks[i].questionCount || 0;
@@ -153,8 +81,6 @@ var QuizSelect = (function() {
             };
         });
     }
-
-    // ===== Card rendering =====
 
     function createBankCard(bank) {
         var card = document.createElement('div');
@@ -206,7 +132,6 @@ var QuizSelect = (function() {
             }
         });
 
-        // Load progress asynchronously
         loadBankProgress(bank.id).then(function(prog) {
             var fill = card.querySelector('[data-bank="' + bank.id + '"]');
             var text = card.querySelector('[data-bank-text="' + bank.id + '"]');
@@ -216,8 +141,6 @@ var QuizSelect = (function() {
 
         return card;
     }
-
-    // ===== Main render =====
 
     function renderBankCards() {
         QuizDB.listBanks().then(function(banks) {
@@ -231,16 +154,15 @@ var QuizSelect = (function() {
         banksContainer.innerHTML = '';
 
         var query = bankSearchQuery.toLowerCase().trim();
-
-        // Step 1: Search filter
         var filtered = allBanks.filter(function(bank) {
             if (!query) return true;
             var name = (bank.name || '').toLowerCase();
             var desc = (bank.description || '').toLowerCase();
-            var group = (bank.group || '').toLowerCase();
-            // Also match type names
             var typeStr = '';
-            var typeNames = { single: '单选', multiple: '多选', tf: '判断', fill: '填空', short: '简答', analysis: '分析' };
+            var typeNames = {
+                single: '单选', multiple: '多选', tf: '判断',
+                fill: '填空', short: '简答', analysis: '分析'
+            };
             if (bank.typeStats) {
                 for (var t in bank.typeStats) {
                     if (bank.typeStats[t] > 0 && typeNames[t]) {
@@ -250,24 +172,10 @@ var QuizSelect = (function() {
             }
             typeStr = typeStr.toLowerCase();
             return name.indexOf(query) !== -1 ||
-                   desc.indexOf(query) !== -1 ||
-                   group.indexOf(query) !== -1 ||
-                   typeStr.indexOf(query) !== -1;
+                desc.indexOf(query) !== -1 ||
+                typeStr.indexOf(query) !== -1;
         });
 
-        // Step 2: Group filter
-        if (bankGroupFilter) {
-            filtered = filtered.filter(function(bank) {
-                var g = bank.group || '其他';
-                return g === bankGroupFilter;
-            });
-        }
-
-        // Step 3: Render group tabs
-        var groups = getUniqueGroups();
-        renderGroupTabs(groups);
-
-        // Step 4: Update search count
         if (bankSearchCount) {
             if (query) {
                 bankSearchCount.textContent = filtered.length + ' 个结果';
@@ -277,7 +185,6 @@ var QuizSelect = (function() {
             }
         }
 
-        // Step 5: Empty state
         if (filtered.length === 0) {
             if (query) {
                 banksContainer.innerHTML =
@@ -296,46 +203,10 @@ var QuizSelect = (function() {
             return;
         }
 
-        // Step 6: Decide rendering mode
-        var hasMultipleGroups = groups.length > 1;
-
-        if (hasMultipleGroups) {
-            // Grouped rendering
-            var grouped = {};
-            for (var i = 0; i < filtered.length; i++) {
-                var g = filtered[i].group || '其他';
-                if (!grouped[g]) grouped[g] = [];
-                grouped[g].push(filtered[i]);
-            }
-
-            // Sort group names
-            var groupNames = Object.keys(grouped).sort();
-
-            for (var gi = 0; gi < groupNames.length; gi++) {
-                var groupName = groupNames[gi];
-                var groupBanks = grouped[groupName];
-
-                // Group title
-                var groupQuestionCount = 0;
-                for (var qi = 0; qi < groupBanks.length; qi++) {
-                    groupQuestionCount += (groupBanks[qi].questionCount || 0);
-                }
-                banksContainer.appendChild(createGroupTitle(groupName, groupBanks.length, groupQuestionCount));
-
-                // Cards in this group
-                for (var bi = 0; bi < groupBanks.length; bi++) {
-                    banksContainer.appendChild(createBankCard(groupBanks[bi]));
-                }
-            }
-        } else {
-            // Flat rendering (0 or 1 group)
-            for (var fi = 0; fi < filtered.length; fi++) {
-                banksContainer.appendChild(createBankCard(filtered[fi]));
-            }
+        for (var i = 0; i < filtered.length; i++) {
+            banksContainer.appendChild(createBankCard(filtered[i]));
         }
     }
-
-    // ===== Search binding =====
 
     function bindBankSearchEvents() {
         if (!bankSearchInput) return;
@@ -362,15 +233,12 @@ var QuizSelect = (function() {
         }
     }
 
-    // ===== Init =====
-
     function init() {
         selectPage = document.getElementById('select-page');
         banksContainer = document.getElementById('banks-container');
         bankSearchInput = document.getElementById('bank-search-input');
         bankSearchClear = document.getElementById('bank-search-clear');
         bankSearchCount = document.getElementById('bank-search-count');
-        bankGroupTabs = document.getElementById('bank-group-tabs');
         bindBankSearchEvents();
     }
 
