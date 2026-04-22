@@ -1654,7 +1654,7 @@ function bindEvents() {
             e.preventDefault();
             return;
         }
-        if (e.key === 'b' || e.key === 'B') {
+        if (e.key === 'x' || e.key === 'X') {
             _toggleBookmark();
             e.preventDefault();
             return;
