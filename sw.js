@@ -1,4 +1,4 @@
-var CACHE_NAME = 'quiz-platform-v6';
+var CACHE_NAME = 'quiz-platform-v8';
 var CACHE_FILES = [
   './',
   './index.html',
