@@ -70,6 +70,8 @@ var state = {
     savedSnapshot: null,
     bookmarked: new Set(),
     shuffleOrder: null,  // null = original order; { [qId]: [2,0,3,1] } after shuffle normalization
+    questionNumberShuffleEnabled: false,
+    questionNumberShuffleOrder: null, // null = original flow; [qId, ...] for objective questions
 };
 
 // ===== DOM Cache =====
@@ -91,6 +93,8 @@ function initDom() {
     dom.submitBtn = document.getElementById('submit-btn');
     dom.grid = document.getElementById('question-grid');
     dom.filters = document.getElementById('filter-tabs');
+    dom.questionNumberShuffleControl = document.getElementById('question-number-shuffle-control');
+    dom.questionNumberShuffleToggle = document.getElementById('question-number-shuffle-toggle');
     dom.statAns = document.getElementById('stat-answered');
     dom.statTotal = document.getElementById('stat-total');
     dom.statOk = document.getElementById('stat-correct');
@@ -219,6 +223,160 @@ function generateShuffleOrders() {
     return orders;
 }
 
+function isQuestionNumberShuffleable(q) {
+    return !!(q && SCORABLE.indexOf(q.type) !== -1);
+}
+
+function hasQuestionNumberShuffleableQuestions() {
+    for (var i = 0; i < quizData.length; i++) {
+        if (isQuestionNumberShuffleable(quizData[i])) return true;
+    }
+    return false;
+}
+
+function getQuestionNumberShuffleableIds() {
+    var ids = [];
+    for (var i = 0; i < quizData.length; i++) {
+        if (isQuestionNumberShuffleable(quizData[i])) ids.push(quizData[i].id);
+    }
+    return ids;
+}
+
+function areQuestionIdListsEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function buildAlternativeQuestionNumberShuffleOrder(objectiveIds, previousOrder) {
+    var candidates = [
+        objectiveIds.slice(1).concat(objectiveIds[0]),
+        objectiveIds.slice().reverse(),
+        objectiveIds.slice()
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+        if (!areQuestionIdListsEqual(candidates[i], previousOrder)) return candidates[i];
+    }
+    return objectiveIds.slice();
+}
+
+function isValidQuestionNumberShuffleOrder(order) {
+    if (!Array.isArray(order)) return false;
+
+    var expectedIds = getQuestionNumberShuffleableIds();
+    if (order.length !== expectedIds.length) return false;
+
+    var expectedSet = {};
+    for (var i = 0; i < expectedIds.length; i++) expectedSet[expectedIds[i]] = true;
+
+    var seen = {};
+    for (var j = 0; j < order.length; j++) {
+        var id = order[j];
+        if (typeof id !== 'number' || id !== Math.floor(id)) return false;
+        if (!expectedSet[id] || seen[id]) return false;
+        seen[id] = true;
+    }
+
+    return true;
+}
+
+function generateQuestionNumberShuffleOrder(previousOrder) {
+    var objectiveIds = getQuestionNumberShuffleableIds();
+    if (!objectiveIds.length) return null;
+    if (objectiveIds.length === 1) return objectiveIds.slice();
+
+    var attempts = 0;
+    while (attempts < 8) {
+        var shuffled = shuffleArray(objectiveIds);
+        if (!areQuestionIdListsEqual(shuffled, objectiveIds) &&
+            !areQuestionIdListsEqual(shuffled, previousOrder)) {
+            return shuffled;
+        }
+        attempts++;
+    }
+
+    return buildAlternativeQuestionNumberShuffleOrder(objectiveIds, previousOrder);
+}
+
+function normalizeQuestionNumberShuffleOrder(enabled, existingOrder) {
+    var hasShuffleable = hasQuestionNumberShuffleableQuestions();
+    var hasExistingOrder = Array.isArray(existingOrder) || (existingOrder !== undefined && existingOrder !== null);
+
+    if (!hasShuffleable) {
+        return {
+            enabled: false,
+            order: null,
+            changed: !!enabled || hasExistingOrder
+        };
+    }
+
+    if (!enabled) {
+        return {
+            enabled: false,
+            order: null,
+            changed: hasExistingOrder
+        };
+    }
+
+    if (isValidQuestionNumberShuffleOrder(existingOrder)) {
+        return {
+            enabled: true,
+            order: existingOrder.slice(),
+            changed: false
+        };
+    }
+
+    return {
+        enabled: true,
+        order: generateQuestionNumberShuffleOrder(),
+        changed: true
+    };
+}
+
+function setQuestionNumberShuffleState(enabled, order) {
+    var normalized = normalizeQuestionNumberShuffleOrder(enabled, order);
+    state.questionNumberShuffleEnabled = normalized.enabled;
+    state.questionNumberShuffleOrder = normalized.order;
+    invalidateFilterCache();
+    return normalized;
+}
+
+function getOrderedQuizData() {
+    if (!state.questionNumberShuffleEnabled ||
+        !state.questionNumberShuffleOrder ||
+        !isValidQuestionNumberShuffleOrder(state.questionNumberShuffleOrder)) {
+        return quizData;
+    }
+
+    var questionMap = {};
+    for (var i = 0; i < quizData.length; i++) {
+        questionMap[quizData[i].id] = quizData[i];
+    }
+
+    var orderedObjectiveQuestions = state.questionNumberShuffleOrder.map(function(id) {
+        return questionMap[id];
+    });
+
+    var objectiveIndex = 0;
+    return quizData.map(function(q) {
+        if (!isQuestionNumberShuffleable(q)) return q;
+        var nextQuestion = orderedObjectiveQuestions[objectiveIndex];
+        objectiveIndex++;
+        return nextQuestion || q;
+    });
+}
+
+function findQuestionIndexById(list, id) {
+    if (!Array.isArray(list)) return -1;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === id) return i;
+    }
+    return -1;
+}
+
 function getShuffledOptions(q) {
     if (!q.options) return q.options;
     if (!state.shuffleOrder) return q.options;
@@ -332,14 +490,26 @@ function syncFilterTabs() {
     });
 }
 
+function syncQuestionNumberShuffleControl() {
+    if (!dom.questionNumberShuffleControl || !dom.questionNumberShuffleToggle) return;
+
+    var hasShuffleable = hasQuestionNumberShuffleableQuestions();
+    dom.questionNumberShuffleControl.classList.toggle('hidden', !hasShuffleable);
+
+    var enabled = hasShuffleable && !!state.questionNumberShuffleEnabled;
+    dom.questionNumberShuffleToggle.classList.toggle('active', enabled);
+    dom.questionNumberShuffleToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    dom.questionNumberShuffleToggle.textContent = enabled ? '已开启' : '已关闭';
+}
+
 function getFiltered() {
     if (_filteredCache !== null) return _filteredCache;
     var list;
     if (state.redoMode) {
         var ids = state.redoQuestionIds;
-        list = quizData.filter(function(q) { return ids.has(q.id); });
+        list = getOrderedQuizData().filter(function(q) { return ids.has(q.id); });
     } else {
-        list = quizData;
+        list = getOrderedQuizData();
         if (state.filter !== 'all') {
             if (state.filter === 'wrong') {
                 list = list.filter(function(q) { return isRevealed(q) && isScorable(q) && !checkCorrect(q); });
@@ -415,7 +585,7 @@ function isHiddenByFilter(q) {
 
 function renderGrid() {
     var html = '';
-    quizData.forEach(function(q) {
+    getOrderedQuizData().forEach(function(q) {
         var cls = 'grid-btn';
         var hide = isHiddenByFilter(q);
         if (hide) cls += ' hidden-by-filter';
@@ -474,6 +644,16 @@ function updateGridButton(q) {
             btn.classList.add('revealed');
         }
     }
+    var statusText = '';
+    if (isRevealed(q)) {
+        if (isScorable(q)) statusText = checkCorrect(q) ? ' 正确' : ' 错误';
+        else statusText = ' 已查看';
+    } else {
+        statusText = ' 未答';
+    }
+    var bmText = state.bookmarked.has(q.id) ? ' 已收藏' : '';
+    btn.textContent = q.id;
+    btn.setAttribute('aria-label', '第' + q.id + '题 ' + (TYPE_LABELS[q.type] || '') + statusText + bmText);
     var filtered = getFiltered();
     var cur = filtered[state.currentIndex];
     if (cur && cur.id === q.id) btn.classList.add('active');
@@ -969,20 +1149,16 @@ function updateRedoBanner() {
 function showRedoResults() {
     var correct = 0, incorrect = 0, unanswered = 0;
     var stillWrongIds = [];
+    var redoQuestions = getOrderedQuizData().filter(function(q) { return state.redoQuestionIds.has(q.id); });
 
-    state.redoQuestionIds.forEach(function(id) {
-        var q = null;
-        for (var i = 0; i < quizData.length; i++) {
-            if (quizData[i].id === id) { q = quizData[i]; break; }
-        }
-        if (!q) return;
-        if (!state.revealed.has(id)) {
+    redoQuestions.forEach(function(q) {
+        if (!state.revealed.has(q.id)) {
             unanswered++;
         } else if (checkCorrect(q)) {
             correct++;
         } else {
             incorrect++;
-            stillWrongIds.push(id);
+            stillWrongIds.push(q.id);
         }
     });
 
@@ -1078,7 +1254,13 @@ function restart() {
         state.currentIndex = 0;
         state.filter = 'all';
         state.shuffleOrder = generateShuffleOrders();
+        if (state.questionNumberShuffleEnabled) {
+            setQuestionNumberShuffleState(true, generateQuestionNumberShuffleOrder(state.questionNumberShuffleOrder));
+        } else {
+            setQuestionNumberShuffleState(false, null);
+        }
         syncFilterTabs();
+        syncQuestionNumberShuffleControl();
         renderGrid();
         renderQuestion();
         updateStats();
@@ -1099,7 +1281,9 @@ function exportProgress() {
         filter: state.filter,
         theme: state.theme,
         bookmarked: Array.from(state.bookmarked),
-        shuffleOrder: state.shuffleOrder
+        shuffleOrder: state.shuffleOrder,
+        questionNumberShuffleEnabled: state.questionNumberShuffleEnabled,
+        questionNumberShuffleOrder: state.questionNumberShuffleOrder
     };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
@@ -1119,6 +1303,11 @@ function validateImportData(d) {
     if (d.currentIndex !== undefined && typeof d.currentIndex !== 'number') return false;
     if (d.filter !== undefined && typeof d.filter !== 'string') return false;
     if (d.theme !== undefined && d.theme !== 'light' && d.theme !== 'dark') return false;
+    if (d.questionNumberShuffleEnabled !== undefined && typeof d.questionNumberShuffleEnabled !== 'boolean') return false;
+    if (d.questionNumberShuffleOrder !== undefined && !Array.isArray(d.questionNumberShuffleOrder)) return false;
+    if (d.questionNumberMap !== undefined &&
+        d.questionNumberMap !== null &&
+        (typeof d.questionNumberMap !== 'object' || Array.isArray(d.questionNumberMap))) return false;
     return true;
 }
 
@@ -1143,9 +1332,11 @@ function importProgress(file) {
                 state.redoQuestionIds = new Set();
                 state.savedSnapshot = null;
                 state.shuffleOrder = normalizeShuffleOrders(d.shuffleOrder).orders;
+                setQuestionNumberShuffleState(d.questionNumberShuffleEnabled === true, d.questionNumberShuffleOrder || null);
                 state.filter = normalizeFilterForCurrentBank(state.filter);
                 applyTheme();
                 syncFilterTabs();
+                syncQuestionNumberShuffleControl();
                 hideRedoBanner();
                 renderGrid();
                 renderQuestion();
@@ -1236,7 +1427,7 @@ function applyTheme() {
 }
 
 // ===== Persistence =====
-var STORAGE_VERSION = 3;
+var STORAGE_VERSION = 5;
 var _saveTimer = null;
 function debouncedSaveState() {
     if (_saveTimer) clearTimeout(_saveTimer);
@@ -1266,6 +1457,8 @@ function saveState() {
             } : null,
             bookmarked: Array.from(state.bookmarked),
             shuffleOrder: state.shuffleOrder,
+            questionNumberShuffleEnabled: state.questionNumberShuffleEnabled,
+            questionNumberShuffleOrder: state.questionNumberShuffleOrder,
             lastAccessedAt: new Date().toISOString()
         }).catch(function(e) {
             console.warn('saveState IDB:', e);
@@ -1288,6 +1481,32 @@ function _toggleBookmark() {
     invalidateFilterCache();
     dom.bookmarkBtn.classList.toggle('active', !wasBookmarked);
     updateGridButton(q);
+    saveState();
+}
+
+function toggleQuestionNumberShuffle() {
+    var filtered = getFiltered();
+    var currentQuestion = filtered[state.currentIndex] || null;
+    var nextEnabled = !state.questionNumberShuffleEnabled;
+    if (nextEnabled) {
+        setQuestionNumberShuffleState(true, generateQuestionNumberShuffleOrder(state.questionNumberShuffleOrder));
+    } else {
+        setQuestionNumberShuffleState(false, null);
+    }
+
+    var nextFiltered = getFiltered();
+    if (currentQuestion) {
+        var nextIndex = findQuestionIndexById(nextFiltered, currentQuestion.id);
+        state.currentIndex = nextIndex !== -1 ? nextIndex : 0;
+    } else if (nextFiltered.length === 0) {
+        state.currentIndex = 0;
+    } else if (state.currentIndex >= nextFiltered.length) {
+        state.currentIndex = nextFiltered.length - 1;
+    }
+
+    syncQuestionNumberShuffleControl();
+    renderGrid();
+    renderQuestion();
     saveState();
 }
 
@@ -1329,6 +1548,15 @@ function bindEvents() {
     };
     _elementHandlers.push([dom.filters, 'click', _filtersClickHandler]);
     dom.filters.addEventListener('click', _filtersClickHandler);
+
+    if (dom.questionNumberShuffleToggle) {
+        var _questionNumberShuffleToggleHandler = function() {
+            if (!hasQuestionNumberShuffleableQuestions()) return;
+            toggleQuestionNumberShuffle();
+        };
+        _elementHandlers.push([dom.questionNumberShuffleToggle, 'click', _questionNumberShuffleToggleHandler]);
+        dom.questionNumberShuffleToggle.addEventListener('click', _questionNumberShuffleToggleHandler);
+    }
 
     var _gridClickHandler = function(e) {
         var btn = e.target.closest('.grid-btn');
@@ -1611,6 +1839,7 @@ function initQuizPage(bankId) {
         QuizDB.getProgress(bankId).then(function(prog) {
             if (myGeneration !== _initGeneration) return; // stale callback
             var shuffleState = null;
+            var questionNumberState = null;
             if (prog) {
                 state.currentIndex = prog.currentIndex || 0;
                 state.answers = prog.answers || {};
@@ -1633,12 +1862,17 @@ function initQuizPage(bankId) {
                 }
                 state.bookmarked = new Set(prog.bookmarked || []);
                 state.shuffleOrder = prog.shuffleOrder || null;
+                state.questionNumberShuffleEnabled = prog.questionNumberShuffleEnabled === true;
+                state.questionNumberShuffleOrder = prog.questionNumberShuffleOrder || null;
             } else {
                 state.theme = localStorage.getItem('quiz_theme') || 'light';
                 state.shuffleOrder = null;
+                state.questionNumberShuffleEnabled = false;
+                state.questionNumberShuffleOrder = null;
             }
             shuffleState = normalizeShuffleOrders(state.shuffleOrder);
             state.shuffleOrder = shuffleState.orders;
+            questionNumberState = setQuestionNumberShuffleState(state.questionNumberShuffleEnabled, state.questionNumberShuffleOrder);
             _stateLoaded = true;
             state.filter = normalizeFilterForCurrentBank(state.filter);
 
@@ -1654,12 +1888,13 @@ function initQuizPage(bankId) {
             }
 
             syncFilterTabs();
+            syncQuestionNumberShuffleControl();
 
             renderGrid();
             renderQuestion();
             updateStats();
             bindEvents();
-            if (shuffleState && shuffleState.changed) saveState();
+            if ((shuffleState && shuffleState.changed) || (questionNumberState && questionNumberState.changed)) saveState();
         });
     }).catch(function(e) {
         console.error('initQuizPage:', e);
@@ -1682,6 +1917,8 @@ function resetState() {
         savedSnapshot: null,
         bookmarked: new Set(),
         shuffleOrder: null,
+        questionNumberShuffleEnabled: false,
+        questionNumberShuffleOrder: null,
     };
 }
 
